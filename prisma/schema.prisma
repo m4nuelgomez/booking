@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+enum OutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
+model Business {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  conversations Conversation[]
+  messages      Message[]
+  webhookEvents WebhookEvent[]
+  outbox        OutboxMessage[]
+}
+
+model User {
+  id         String   @id @default(cuid())
+  businessId String
+  email      String   @unique
+  name       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+}
+
+model WebhookEvent {
+  id          String        @id @default(cuid())
+  businessId  String?
+  provider    String
+  eventType   String?
+  payload     Json
+  status      WebhookStatus @default(RECEIVED)
+  receivedAt  DateTime      @default(now())
+  processedAt DateTime?
+
+  business Business? @relation(fields: [businessId], references: [id])
+
+  @@index([provider, receivedAt])
+  @@index([status, receivedAt])
+}
+
+model Conversation {
+  id            String   @id @default(cuid())
+  businessId    String
+  contactPhone  String
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id])
+  messages Message[]
+
+  outboxMessages OutboxMessage[]
+
+  @@unique([businessId, contactPhone])
+  @@index([businessId, lastMessageAt])
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  businessId        String
+  conversationId    String
+  direction         MessageDirection
+  provider          String
+  providerMessageId String?
+  fromPhone         String
+  toPhone           String
+  text              String?
+  payload           Json?
+  createdAt         DateTime         @default(now())
+
+  business     Business     @relation(fields: [businessId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  // Anti-duplicados por reintentos del provider
+  @@unique([provider, providerMessageId])
+  // Inbox rápido: mensajes por conversación en orden
+  @@index([conversationId, createdAt])
+  @@index([businessId, createdAt])
+}
+
+model OutboxMessage {
+  id             String       @id @default(cuid())
+  businessId     String
+  conversationId String
+  provider       String       @default("whatsapp")
+  toPhone        String
+  text           String
+  status         OutboxStatus @default(PENDING)
+  attemptCount   Int          @default(0)
+  nextAttemptAt  DateTime     @default(now())
+  lastError      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  business     Business     @relation(fields: [businessId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  // Worker/cron busca pendientes por tiempo
+  @@index([status, nextAttemptAt])
+  @@index([businessId, createdAt])
+}

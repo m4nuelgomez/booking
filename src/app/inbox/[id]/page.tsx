@@ -1,6 +1,7 @@
-// src/app/inbox/[id]/page.tsx
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { SendBox } from "./SendBox";
+import { AutoScroll } from "./AutoScroll";
 
 export default async function ConversationPage({
   params,
@@ -32,40 +33,66 @@ export default async function ConversationPage({
       direction: true,
       text: true,
       createdAt: true,
-      fromPhone: true,
-      toPhone: true,
       providerMessageId: true,
     },
   });
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui" }}>
-      <Link href="/inbox">← Back</Link>
-      <h1 style={{ fontSize: 20, fontWeight: 700, marginTop: 12 }}>
-        {convo.contactPhone}
-      </h1>
+      <AutoScroll />
 
-      <ul style={{ marginTop: 16, display: "grid", gap: 10, padding: 0, listStyle: "none" }}>
-        {messages.map((m) => (
-          <li
-            key={m.id}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 12,
-              background: m.direction === "INBOUND" ? "#fff" : "#f7f7f7",
-            }}
-          >
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {m.createdAt.toISOString()} · {m.direction} · {m.providerMessageId ?? "no-id"}
-            </div>
-            <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-              {m.text ?? "(non-text message)"}
-            </div>
-          </li>
-        ))}
-        {messages.length === 0 && <li style={{ opacity: 0.7 }}>No messages yet.</li>}
-      </ul>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Link href="/inbox">← Back</Link>
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
+            {convo.contactPhone}
+          </h1>
+        </div>
+
+        {/* Messages */}
+        <ul
+          style={{
+            marginTop: 16,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            padding: 0,
+            listStyle: "none",
+            paddingBottom: 110,
+          }}
+        >
+          {messages.map((m) => (
+            <li
+              key={m.id}
+              style={{
+                maxWidth: "70%",
+                alignSelf: m.direction === "INBOUND" ? "flex-start" : "flex-end",
+                borderRadius: 16,
+                padding: "10px 14px",
+                background: m.direction === "INBOUND" ? "#2a2a2a" : "#25D366",
+                color: m.direction === "INBOUND" ? "#ffffff" : "#000000",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+              }}
+            >
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                {m.createdAt.toISOString()} · {m.direction} ·{" "}
+                {m.providerMessageId ?? "no-id"}
+              </div>
+              <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                {m.text ?? "(non-text message)"}
+              </div>
+            </li>
+          ))}
+
+          {messages.length === 0 && (
+            <li style={{ opacity: 0.7 }}>No messages yet.</li>
+          )}
+        </ul>
+      </div>
+
+      {/* Composer al final (sticky bottom) */}
+      <SendBox conversationId={convo.id} toPhone={convo.contactPhone} />
     </main>
   );
 }

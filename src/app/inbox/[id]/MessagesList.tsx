@@ -1,0 +1,414 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+
+type Msg = {
+  id: string;
+  direction: "INBOUND" | "OUTBOUND" | string;
+  text: string | null;
+  createdAt: string | Date;
+  providerMessageId: string | null;
+  payload?: any;
+  status?: "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED" | string;
+};
+
+function isNearBottom(el: HTMLElement, thresholdPx = 20) {
+  const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+  return distance < thresholdPx;
+}
+
+function scrollToBottom(el: HTMLElement | null, smooth = false) {
+  if (!el) return;
+  el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+}
+
+function formatDayChip(dateInput: string | Date) {
+  const d = new Date(dateInput);
+  const now = new Date();
+
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const startOfThatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  const diffDays =
+    (startOfToday.getTime() - startOfThatDay.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Ayer";
+
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function TickSvg({
+  variant,
+}: {
+  variant: "single" | "double" | "doubleBlue" | "failed";
+}) {
+  if (variant === "failed") {
+    return <span className="text-red-300 font-extrabold">!</span>;
+  }
+
+  const color =
+    variant === "doubleBlue" ? "var(--wa-blue)" : "rgba(134,150,160,0.95)"; // #8696a0 WA grey
+
+  return (
+    <svg
+      width="18"
+      height="12"
+      viewBox="0 0 18 12"
+      fill="none"
+      style={{ color }}
+    >
+      {variant === "single" ? (
+        <path
+          d="M6.2 9.2L2.7 5.7l-1.1 1.1 4.6 4.6L16.4 1.2 15.3.1 6.2 9.2z"
+          fill="currentColor"
+        />
+      ) : (
+        <>
+          <path
+            d="M6.2 9.2L2.7 5.7l-1.1 1.1 4.6 4.6L16.4 1.2 15.3.1 6.2 9.2z"
+            fill="currentColor"
+          />
+          <path
+            d="M11.0 9.2L7.5 5.7l-1.1 1.1 4.6 4.6L17.8 3.6l-1.1-1.1L11.0 9.2z"
+            fill="currentColor"
+          />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function tickVariant(status: string | undefined) {
+  if (!status) return "single" as const;
+  if (status === "SENT") return "single";
+  if (status === "DELIVERED") return "double";
+  if (status === "READ") return "doubleBlue";
+  return "single" as const;
+}
+
+export default function MessagesList({
+  conversationId,
+  initialMessages,
+}: {
+  conversationId: string;
+  initialMessages: Msg[];
+}) {
+  const router = useRouter();
+
+  const [atBottom, setAtBottom] = useState(true);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const [messages, setMessages] = useState<Msg[]>(initialMessages);
+
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const isUserAtBottomRef = useRef(true);
+
+  const lastIdRef = useRef<string | null>(initialMessages.at(-1)?.id ?? null);
+  const sinceRef = useRef<string>(new Date().toISOString());
+
+  const inFlightRef = useRef(false);
+  const lastRTTRef = useRef(0);
+
+  const markReadInFlightRef = useRef(false);
+  const lastMarkedReadRef = useRef<string | null>(null);
+
+  async function markReadIfNeeded(messageId: string | null) {
+    if (!messageId) return;
+    if (lastMarkedReadRef.current === messageId) return;
+    if (markReadInFlightRef.current) return;
+
+    markReadInFlightRef.current = true;
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lastMessageId: messageId }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) return;
+
+      lastMarkedReadRef.current = messageId;
+      router.refresh();
+    } finally {
+      markReadInFlightRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    setMessages(initialMessages);
+    lastIdRef.current = initialMessages.at(-1)?.id ?? null;
+
+    sinceRef.current = new Date(0).toISOString();
+
+    setNewMessagesCount(0);
+
+    isUserAtBottomRef.current = true;
+    lastMarkedReadRef.current = null;
+    markReadInFlightRef.current = false;
+
+    requestAnimationFrame(() => {
+      scrollToBottom(wrapRef.current);
+
+      const el = wrapRef.current;
+      if (el) {
+        const near = isNearBottom(el);
+        isUserAtBottomRef.current = near;
+        setAtBottom(near);
+      }
+
+      markReadIfNeeded(lastIdRef.current);
+    });
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (messages.length === 0 && initialMessages.length > 0) {
+      setMessages(initialMessages);
+      lastIdRef.current = initialMessages.at(-1)?.id ?? null;
+    }
+  }, [initialMessages]);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const near = isNearBottom(el);
+      isUserAtBottomRef.current = near;
+      setAtBottom(near);
+
+      if (near) {
+        markReadIfNeeded(lastIdRef.current);
+        setNewMessagesCount(0);
+      }
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function fetchNew() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    const t0 = performance.now();
+    try {
+      const qs = new URLSearchParams({ conversationId });
+      if (lastIdRef.current) qs.set("after", lastIdRef.current);
+      qs.set("since", sinceRef.current);
+
+      const res = await fetch(`/api/messages/list?${qs.toString()}`, {
+        cache: "no-store",
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) return;
+
+      const incoming: Msg[] = data.messages ?? [];
+      const updates: Msg[] = data.updates ?? [];
+
+      if (!incoming.length && !updates.length) {
+        if (data?.now) sinceRef.current = data.now;
+        return;
+      }
+
+      router.refresh();
+
+      const wasAtBottom = isUserAtBottomRef.current;
+
+      setMessages((prev) => {
+        const map = new Map(prev.map((m) => [m.id, m] as const));
+
+        for (const u of updates) {
+          const old = map.get(u.id);
+          map.set(u.id, { ...(old ?? u), ...u });
+        }
+
+        for (const m of incoming) {
+          if (!map.has(m.id)) map.set(m.id, m);
+        }
+
+        const merged = Array.from(map.values());
+        merged.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        lastIdRef.current = merged.at(-1)?.id ?? lastIdRef.current;
+        return merged;
+      });
+
+      if (data?.now) sinceRef.current = data.now;
+
+      if (wasAtBottom) {
+        requestAnimationFrame(() => scrollToBottom(wrapRef.current, true));
+        await markReadIfNeeded(lastIdRef.current);
+        setNewMessagesCount(0);
+      } else {
+        if (incoming.length) setNewMessagesCount((c) => c + incoming.length);
+      }
+    } finally {
+      lastRTTRef.current = performance.now() - t0;
+      inFlightRef.current = false;
+    }
+  }
+
+  useEffect(() => {
+    let t: any;
+
+    function schedule() {
+      const fast = isUserAtBottomRef.current;
+      const target = fast ? 450 : 1400;
+      const rtt = lastRTTRef.current || 0;
+
+      const wait = Math.max(80, target - rtt);
+
+      t = setTimeout(async () => {
+        await fetchNew();
+        schedule();
+      }, wait);
+    }
+
+    schedule();
+    return () => clearTimeout(t);
+  }, [conversationId]);
+
+  useEffect(() => {
+    const handler = () => fetchNew();
+    window.addEventListener("booking:messageSent", handler as any);
+    return () =>
+      window.removeEventListener("booking:messageSent", handler as any);
+  }, [conversationId]);
+
+  return (
+    <div className="relative h-full min-h-0">
+      {/* Scroll area */}
+      <div
+        ref={wrapRef}
+        className="chatScroll h-full overflow-y-auto px-4 py-3"
+        style={{ background: "var(--wa-panel)" }} // WA surface
+      >
+        <div className="space-y-2">
+          {messages.map((m, idx) => {
+            const outbound = m.direction === "OUTBOUND";
+            const failed =
+              outbound &&
+              (m.status === "FAILED" || m?.payload?.sendStatus === "FAILED");
+            const usedTemplate = outbound && m?.payload?.usedTemplate === true;
+
+            const prev = idx > 0 ? messages[idx - 1] : null;
+            const day = new Date(m.createdAt).toDateString();
+            const prevDay = prev
+              ? new Date(prev.createdAt).toDateString()
+              : null;
+            const showDayChip = day !== prevDay;
+
+            const bubbleClass = outbound
+              ? failed
+                ? "ml-auto bg-red-600 text-white"
+                : usedTemplate
+                ? "ml-auto bg-yellow-400 text-black"
+                : "ml-auto text-[#e9edef]"
+              : "mr-auto text-[#e9edef]";
+
+            const bubbleStyle = outbound
+              ? failed || usedTemplate
+                ? undefined
+                : { background: "var(--wa-out)" } // #005c4b
+              : { background: "var(--wa-in)" }; // #202c33
+
+            return (
+              <div key={m.id}>
+                {showDayChip && (
+                  <div className="mx-auto my-2 w-fit rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/70 border border-white/10">
+                    {formatDayChip(m.createdAt) === "Hoy" ? (
+                      <span className="font-semibold text-white/80">Hoy</span>
+                    ) : (
+                      formatDayChip(m.createdAt)
+                    )}
+                  </div>
+                )}
+
+                <div
+                  className={`max-w-[72%] rounded-xl px-3 py-2 text-[13px] leading-5 shadow-sm ${bubbleClass}`}
+                  style={bubbleStyle}
+                >
+                  <div className="whitespace-pre-wrap">{m.text ?? ""}</div>
+
+                  {/* footer WA: hora + ticks pegados */}
+                  <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-white/60">
+                    <span>
+                      {new Date(m.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+
+                    {outbound && (
+                      <span className="ml-0.5 translate-y-px">
+                        <TickSvg
+                          variant={
+                            failed
+                              ? "failed"
+                              : tickVariant(String(m.status ?? ""))
+                          }
+                        />
+                      </span>
+                    )}
+                  </div>
+
+                  {usedTemplate && !failed && (
+                    <div className="mt-1 text-[11px] opacity-80">
+                      Se envió plantilla para abrir conversación (no se envió tu
+                      texto)
+                    </div>
+                  )}
+
+                  {failed && (
+                    <div className="mt-1 text-[11px] opacity-80">
+                      No enviado:{" "}
+                      {String(m?.payload?.sendError ?? "").slice(0, 120)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Scroll to bottom button (WA style) */}
+      {newMessagesCount > 0 && !atBottom && (
+        <button
+          onClick={() => {
+            scrollToBottom(wrapRef.current, true);
+            markReadIfNeeded(lastIdRef.current);
+            setNewMessagesCount(0);
+            setAtBottom(true);
+            isUserAtBottomRef.current = true;
+          }}
+          className="absolute bottom-6 right-6 z-50 h-11 w-11 rounded-full bg-[#202c33] border border-white/10 shadow-lg grid place-items-center text-white/80 hover:bg-white/10"
+          title={`${newMessagesCount} nuevo(s)`}
+          aria-label="Scroll to bottom"
+        >
+          <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 rounded-full bg-[#00a884] text-[#111b21] text-[12px] font-extrabold grid place-items-center border border-black/30 animate-bounce-once">
+            {newMessagesCount > 99 ? "99+" : newMessagesCount}
+          </span>
+
+          <span className="text-[16px]">▾</span>
+        </button>
+      )}
+    </div>
+  );
+}

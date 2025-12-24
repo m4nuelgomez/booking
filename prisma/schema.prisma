@@ -24,6 +24,14 @@ enum OutboxStatus {
   FAILED
 }
 
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
 model Business {
   id        String   @id @default(cuid())
   name      String
@@ -70,13 +78,15 @@ model Conversation {
   id            String   @id @default(cuid())
   businessId    String
   contactPhone  String
-  lastMessageAt DateTime @default(now())
+  lastMessageAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  lastReadMessageId String?
+  unreadCount       Int @default(0)
+
   business Business  @relation(fields: [businessId], references: [id])
   messages Message[]
-
   outboxMessages OutboxMessage[]
 
   @@unique([businessId, contactPhone])
@@ -95,15 +105,19 @@ model Message {
   text              String?
   payload           Json?
   createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  status      MessageStatus @default(QUEUED)
+  deliveredAt DateTime?
+  readAt      DateTime?
 
   business     Business     @relation(fields: [businessId], references: [id])
   conversation Conversation @relation(fields: [conversationId], references: [id])
 
-  // Anti-duplicados por reintentos del provider
   @@unique([provider, providerMessageId])
-  // Inbox rápido: mensajes por conversación en orden
   @@index([conversationId, createdAt])
   @@index([businessId, createdAt])
+  @@index([conversationId, updatedAt])
 }
 
 model OutboxMessage {

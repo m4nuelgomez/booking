@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import MessagesList from "./MessagesList";
 import { SendBox } from "./SendBox";
-import { AutoScroll } from "./AutoScroll";
+import { IconMenu, IconSearch } from "./WaIcons";
 
 export default async function ConversationPage({
   params,
@@ -17,10 +17,7 @@ export default async function ConversationPage({
 
   if (!convo) {
     return (
-      <main style={{ padding: 24, fontFamily: "system-ui" }}>
-        <p>Conversation not found.</p>
-        <Link href="/inbox">Back</Link>
-      </main>
+      <div className="h-full p-6 text-white/80">Conversation not found.</div>
     );
   }
 
@@ -34,65 +31,62 @@ export default async function ConversationPage({
       text: true,
       createdAt: true,
       providerMessageId: true,
+      payload: true,
+      status: true,
+      deliveredAt: true,
+      readAt: true,
     },
   });
 
-  return (
-    <main style={{ padding: 24, fontFamily: "system-ui" }}>
-      <AutoScroll />
+  const initialMessages = messages.map((m) => ({
+    ...m,
+    createdAt: m.createdAt.toISOString(),
+  }));
 
-      <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Link href="/inbox">← Back</Link>
-          <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
-            {convo.contactPhone}
-          </h1>
+  return (
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
+      {/* TOPBAR (WhatsApp style) */}
+      <div className="wa-topbar px-4 py-3 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-full bg-white/10 border border-white/10 grid place-items-center text-white font-extrabold">
+          {convo.contactPhone.slice(-2)}
         </div>
 
-        {/* Messages */}
-        <ul
-          style={{
-            marginTop: 16,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            padding: 0,
-            listStyle: "none",
-            paddingBottom: 110,
-          }}
-        >
-          {messages.map((m) => (
-            <li
-              key={m.id}
-              style={{
-                maxWidth: "70%",
-                alignSelf: m.direction === "INBOUND" ? "flex-start" : "flex-end",
-                borderRadius: 16,
-                padding: "10px 14px",
-                background: m.direction === "INBOUND" ? "#2a2a2a" : "#25D366",
-                color: m.direction === "INBOUND" ? "#ffffff" : "#000000",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
-              }}
-            >
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                {m.createdAt.toISOString()} · {m.direction} ·{" "}
-                {m.providerMessageId ?? "no-id"}
-              </div>
-              <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-                {m.text ?? "(non-text message)"}
-              </div>
-            </li>
-          ))}
+        <div className="min-w-0">
+          <div className="text-[14px] font-extrabold text-white truncate">
+            {convo.contactPhone}
+          </div>
+          <div
+            className="text-[12px] leading-tight"
+            style={{ color: "var(--wa-sub)" }}
+          >
+            online
+          </div>
+        </div>
 
-          {messages.length === 0 && (
-            <li style={{ opacity: 0.7 }}>No messages yet.</li>
-          )}
-        </ul>
+        <div className="ml-auto flex items-center">
+          <button className="wa-icon-btn" aria-label="Search">
+            <IconSearch size={19} />
+          </button>
+          <button className="wa-icon-btn" aria-label="Menu">
+            <IconMenu />
+          </button>
+        </div>
       </div>
 
-      {/* Composer al final (sticky bottom) */}
-      <SendBox conversationId={convo.id} toPhone={convo.contactPhone} />
-    </main>
+      {/* CHAT AREA */}
+      <div className="flex-1 min-h-0 p-3">
+        <div className="wa-chat-surface h-full min-h-0 overflow-hidden">
+          <MessagesList
+            conversationId={convo.id}
+            initialMessages={initialMessages}
+          />
+        </div>
+      </div>
+
+      {/* COMPOSER */}
+      <div className="wa-composer px-3 py-3">
+        <SendBox conversationId={convo.id} toPhone={convo.contactPhone} />
+      </div>
+    </div>
   );
 }

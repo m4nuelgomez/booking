@@ -3,6 +3,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --wa-bg: #0b141a;
+  --wa-panel: #0b141a;
+  --wa-panel-2: #202c33;
+  --wa-header: #202c33;
+  --wa-border: rgba(255, 255, 255, 0.08);
+  --wa-text: #e9edef;
+  --wa-muted: rgba(233, 237, 239, 0.65);
+  --wa-out: #005c4b;
+  --wa-in: #202c33;
+  --wa-accent: #25d366;
+  --wa-blue: #53bdeb;
+  --wa-icon: #aebac1;
+  --wa-sub: #8696a0;
 }
 
 @theme inline {
@@ -23,4 +36,218 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.chatScroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+/* Chat scrollbar: Chrome friendly (sutil siempre) */
+.chatScroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chatScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.chatScroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.wa-wallpaper {
+  background: radial-gradient(
+      1200px 600px at 50% -10%,
+      rgba(37, 211, 102, 0.1),
+      transparent 60%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0));
+}
+
+.wa-panel {
+  background: #111b21;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.wa-composer {
+  padding: 10px 12px;
+  background: rgba(11, 20, 26, 0.92); /* WA base */
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wa-composerInner {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+
+  background: rgba(32, 44, 51, 0.85); /* WA input bg */
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 8px 10px;
+}
+
+.wa-iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: rgba(233, 237, 239, 0.75);
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.wa-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(233, 237, 239, 0.92);
+  font-size: 14px;
+  line-height: 20px;
+  padding: 7px 4px;
+
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.wa-input::placeholder {
+  color: rgba(233, 237, 239, 0.45);
+}
+
+.wa-sendBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: none;
+
+  background: #00a884; /* WA green */
+  color: #0b141a;
+
+  display: grid;
+  place-items: center;
+
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+
+.wa-sendBtn:hover {
+  filter: brightness(1.05);
+}
+
+.wa-sendBtn:active {
+  transform: translateY(1px);
+}
+
+.wa-sendBtn:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(233, 237, 239, 0.35);
+  cursor: not-allowed;
+}
+
+.wa-composerError {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255, 120, 120, 0.9);
+}
+
+.wa-panel {
+  border-radius: 18px;
+  border: 1px solid var(--wa-border);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(255, 255, 255, 0.01)
+  );
+  backdrop-filter: blur(10px);
+}
+
+.wa-chat-surface {
+  background: var(--wa-panel);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.wa-topbar {
+  background: var(--wa-header);
+  border-bottom: 1px solid var(--wa-border);
+}
+
+.wa-composer {
+  background: var(--wa-panel-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wa-bubble {
+  position: relative;
+}
+
+.wa-out::after {
+  content: "";
+  position: absolute;
+  right: -6px;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: var(--wa-out);
+  border-bottom-left-radius: 12px;
+  transform: skewX(-20deg);
+}
+
+.wa-in::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: var(--wa-in);
+  border-bottom-right-radius: 12px;
+  transform: skewX(20deg);
+}
+
+.wa-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--wa-icon);
+}
+
+.wa-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@keyframes bounce-once {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-bounce-once {
+  animation: bounce-once 280ms ease-out both;
 }

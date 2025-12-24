@@ -1,6 +1,7 @@
-// src/app/api/webhooks/whatsapp/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
 
 const PROVIDER = "whatsapp";
 
@@ -10,10 +11,6 @@ function getDefaultBusinessId() {
   return id;
 }
 
-/**
- * Intenta extraer 1 mensaje del payload típico de WhatsApp Cloud API.
- * Si no es un mensaje (ej. statuses), regresa null.
- */
 function extractWhatsappMessage(payload: any) {
   const entry = payload?.entry?.[0];
   const change = entry?.changes?.[0];
@@ -22,19 +19,14 @@ function extractWhatsappMessage(payload: any) {
   const message = value?.messages?.[0];
   if (!message) return null;
 
-  const fromPhone = String(message.from ?? ""); // teléfono del cliente (wa_id)
+  const fromPhone = message.from ?? "";
   const providerMessageId = message.id ? String(message.id) : null;
 
-  const text =
-    message.type === "text"
-      ? String(message.text?.body ?? "")
-      : null;
+  const text = message.type === "text" ? message.text?.body ?? "" : null;
 
-  // “toPhone” en Cloud API muchas veces viene como metadata.phone_number_id (no es teléfono real)
-  const toPhone =
-    value?.metadata?.phone_number_id
-      ? String(value.metadata.phone_number_id)
-      : "";
+  const toPhone = value?.metadata?.display_phone_number
+    ? String(value.metadata.display_phone_number)
+    : "";
 
   return {
     eventType: change?.field ? String(change.field) : "messages",
@@ -47,11 +39,74 @@ function extractWhatsappMessage(payload: any) {
 }
 
 /**
- * WhatsApp Cloud requiere verificación GET cuando registras el webhook.
- * - hub.mode=subscribe
- * - hub.verify_token=...
- * - hub.challenge=...
+ * WhatsApp status webhooks: delivered / read (and sometimes sent)
+ * Updates outbound messages by providerMessageId (wamid).
+ * Returns how many status items were processed.
  */
+async function handleWhatsappStatuses(businessId: string, payload: any) {
+  const entry = payload?.entry?.[0];
+  const change = entry?.changes?.[0];
+  const value = change?.value;
+
+  const statuses = value?.statuses;
+  if (!Array.isArray(statuses) || statuses.length === 0) return 0;
+
+  let processed = 0;
+
+  for (const s of statuses) {
+    const wamid = s?.id ? String(s.id) : null;
+    const status = s?.status ? String(s.status) : null; // "sent" | "delivered" | "read"
+    const ts = s?.timestamp ? new Date(Number(s.timestamp) * 1000) : new Date();
+
+    if (!wamid || !status) continue;
+
+    if (status === "delivered") {
+      await prisma.message.updateMany({
+        where: {
+          businessId,
+          provider: PROVIDER,
+          providerMessageId: wamid,
+          direction: "OUTBOUND",
+        },
+        data: { status: "DELIVERED", deliveredAt: ts },
+      });
+      processed++;
+      continue;
+    }
+
+    if (status === "read") {
+      await prisma.message.updateMany({
+        where: {
+          businessId,
+          provider: PROVIDER,
+          providerMessageId: wamid,
+          direction: "OUTBOUND",
+        },
+        data: { status: "READ", readAt: ts },
+      });
+      processed++;
+      continue;
+    }
+
+    if (status === "sent") {
+      // opcional: por si llega status "sent" vía webhook
+      await prisma.message.updateMany({
+        where: {
+          businessId,
+          provider: PROVIDER,
+          providerMessageId: wamid,
+          direction: "OUTBOUND",
+        },
+        data: { status: "SENT" },
+      });
+      processed++;
+      continue;
+    }
+  }
+
+  return processed;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
@@ -61,7 +116,6 @@ export async function GET(req: Request) {
 
   const expected = process.env.WHATSAPP_VERIFY_TOKEN;
 
-  // Si aún no lo configuras, no rompemos: respondemos 200 simple para dev local
   if (!expected) {
     return new NextResponse("OK (no verify token configured)", { status: 200 });
   }
@@ -78,12 +132,16 @@ export async function POST(req: Request) {
 
   let payload: any;
   try {
-    payload = await req.json();
+    const rawBody = await req.arrayBuffer();
+    const jsonText = new TextDecoder("utf-8").decode(rawBody);
+    payload = JSON.parse(jsonText);
   } catch {
-    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: "Invalid JSON" },
+      { status: 400 }
+    );
   }
 
-  // 1) Guardar RAW siempre
   const raw = await prisma.webhookEvent.create({
     data: {
       businessId,
@@ -95,23 +153,32 @@ export async function POST(req: Request) {
     select: { id: true },
   });
 
-  // 2) Intentar normalizar si hay un mensaje
   try {
+    // 1) Primero procesamos statuses (palomitas)
+    const statusesProcessed = await handleWhatsappStatuses(businessId, payload);
+
+    // 2) Luego procesamos inbound messages como ya lo haces
     const extracted = extractWhatsappMessage(payload);
 
-    // Si no es mensaje (statuses, etc.), solo marcamos como PROCESSED y salimos
     if (!extracted) {
       await prisma.webhookEvent.update({
         where: { id: raw.id },
         data: { status: "PROCESSED", processedAt: new Date() },
       });
 
-      return NextResponse.json({ ok: true, processed: false, reason: "No message in payload" });
+      return NextResponse.json({
+        ok: true,
+        processed: statusesProcessed > 0,
+        statusesProcessed,
+        reason:
+          statusesProcessed > 0
+            ? "Statuses processed (no inbound message)"
+            : "No message in payload",
+      });
     }
 
     const contactPhone = extracted.fromPhone;
 
-    // Upsert conversación por (businessId, contactPhone)
     const conversation = await prisma.conversation.upsert({
       where: {
         businessId_contactPhone: { businessId, contactPhone },
@@ -127,37 +194,39 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    // Insert message con idempotencia si viene providerMessageId
-    // OJO: si providerMessageId es null, la unique no ayuda.
-    // Para MVP: lo guardamos igual. Luego mejoramos dedupe usando hash del payload.
-    await prisma.message.create({
-      data: {
-        businessId,
-        conversationId: conversation.id,
-        direction: "INBOUND",
-        provider: PROVIDER,
-        providerMessageId: extracted.providerMessageId,
-        fromPhone: extracted.fromPhone,
-        toPhone: extracted.toPhone,
-        text: extracted.text,
-        payload: extracted.rawMessage,
-      },
-    }).catch(async (err: any) => {
-      // Si es duplicado por @@unique([provider, providerMessageId]), lo ignoramos
-      // Prisma suele dar code P2002 para unique constraint
-      if (err?.code === "P2002") return;
-      throw err;
-    });
+    await prisma.message
+      .create({
+        data: {
+          businessId,
+          conversationId: conversation.id,
+          direction: "INBOUND",
+          provider: PROVIDER,
+          providerMessageId: extracted.providerMessageId,
+          fromPhone: extracted.fromPhone,
+          toPhone: extracted.toPhone,
+          text: extracted.text,
+          payload: extracted.rawMessage,
 
-    // Marcar RAW como PROCESSED
+          // 👇 opcional pero recomendado para que INBOUND no quede como QUEUED
+          status: "SENT",
+        },
+      })
+      .catch(async (err: any) => {
+        if (err?.code === "P2002") return; // idempotencia provider+providerMessageId
+        throw err;
+      });
+
     await prisma.webhookEvent.update({
       where: { id: raw.id },
       data: { status: "PROCESSED", processedAt: new Date() },
     });
 
-    return NextResponse.json({ ok: true, processed: true });
+    return NextResponse.json({
+      ok: true,
+      processed: true,
+      statusesProcessed,
+    });
   } catch (err: any) {
-    // Marcar RAW como FAILED
     await prisma.webhookEvent.update({
       where: { id: raw.id },
       data: { status: "FAILED" },

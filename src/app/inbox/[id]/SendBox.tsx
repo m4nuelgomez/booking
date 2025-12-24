@@ -1,6 +1,21 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+function SendIcon({ disabled }: { disabled: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      className={disabled ? "opacity-40" : "opacity-90"}
+    >
+      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" fill="currentColor" />
+    </svg>
+  );
+}
 
 export function SendBox({
   conversationId,
@@ -9,99 +24,75 @@ export function SendBox({
   conversationId: string;
   toPhone: string;
 }) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   async function onSend() {
     const t = text.trim();
-    if (!t) return;
+    if (!t || loading) return;
+
+    // UX: limpia inmediato
+    setText("");
+    const backup = t;
 
     setLoading(true);
-    setError(null);
-
     try {
       const res = await fetch("/api/messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId,
-          toPhone,
-          text: t,
-        }),
+        body: JSON.stringify({ conversationId, toPhone, text: t }),
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
+      if (!res.ok || !data?.ok)
         throw new Error(data?.error ?? `HTTP ${res.status}`);
-      }
 
-      setText("");
-      // MVP: recarga para ver el mensaje OUTBOUND en la lista
-      window.location.reload();
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to send");
+      // refresca sidebar + pinta mensaje local via event (lo que ya traes)
+      router.refresh();
+      window.dispatchEvent(new Event("booking:messageSent"));
+    } catch (e) {
+      // si falla, regresa texto
+      setText(backup);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-  <div
-    style={{
-      position: "fixed",
-      left: 0,
-      right: 0,
-      bottom: 20,
-      zIndex: 50,
-      paddingTop: 12,
-      paddingBottom: 12,
-      background: "rgba(0,0,0,0.85)",
-      backdropFilter: "blur(8px)",
-      borderTop: "1px solid rgba(255,255,255,0.08)",
-      marginTop: 18,
-    }}
-  >
-    <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 8 }}>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Write a message..."
-        rows={2}
-        style={{
-          width: "100%",
-          padding: 12,
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.15)",
-          background: "#141414",
-          color: "#fff",
-          outline: "none",
-          resize: "none",
-        }}
-      />
-      <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 12, opacity: 0.7 }}>To: {toPhone}</span>
+  const disabled = loading || !text.trim();
 
-        <button
-          onClick={onSend}
-          disabled={loading || !text.trim()}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.15)",
-            cursor: loading ? "not-allowed" : "pointer",
-            background: loading || !text.trim() ? "rgba(255,255,255,0.08)" : "#25D366",
-            color: loading || !text.trim() ? "rgba(255,255,255,0.5)" : "#000",
-            fontWeight: 700,
-            minWidth: 120,
+  return (
+    <div className="flex items-end gap-2">
+      {/* input */}
+      <div className="flex-1 rounded-full bg-[#111b21] border border-white/10 px-4 py-2">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Escribe un mensaje"
+          rows={1}
+          className="w-full resize-none bg-transparent outline-none text-[14px] text-white placeholder:text-white/40 leading-5"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSend();
+            }
           }}
-        >
-          {loading ? "Sending..." : "Queue Send"}
-        </button>
+        />
       </div>
 
-      {error && <div style={{ color: "crimson", fontSize: 12 }}>{error}</div>}
+      {/* send */}
+      <button
+        onClick={onSend}
+        disabled={disabled}
+        className={`h-10 w-10 rounded-full grid place-items-center ${
+          disabled ? "bg-white/10 text-white/40" : "bg-[#25d366] text-black"
+        }`}
+        type="button"
+        aria-label="Send"
+      >
+        <SendIcon disabled={disabled} />
+      </button>
     </div>
-  </div>
-);
+  );
 }

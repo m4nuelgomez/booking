@@ -109,6 +109,12 @@ export default function MessagesList({
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
 
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const isUserAtBottomRef = useRef(true);
@@ -172,13 +178,6 @@ export default function MessagesList({
   }, [conversationId]);
 
   useEffect(() => {
-    if (messages.length === 0 && initialMessages.length > 0) {
-      setMessages(initialMessages);
-      lastIdRef.current = initialMessages.at(-1)?.id ?? null;
-    }
-  }, [initialMessages]);
-
-  useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
 
@@ -197,6 +196,16 @@ export default function MessagesList({
     return () => el.removeEventListener("scroll", onScroll);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const refreshDebounceRef = useRef<any>(null);
+
+  function refreshSidebarSoon() {
+    if (refreshDebounceRef.current) return;
+    refreshDebounceRef.current = setTimeout(() => {
+      refreshDebounceRef.current = null;
+      router.refresh();
+    }, 600);
+  }
 
   async function fetchNew() {
     if (inFlightRef.current) return;
@@ -218,35 +227,51 @@ export default function MessagesList({
       const incoming: Msg[] = data.messages ?? [];
       const updates: Msg[] = data.updates ?? [];
 
-      if (!incoming.length && !updates.length) {
+      const norm = (m: any) => ({
+        ...m,
+        createdAt: new Date(m.createdAt).toISOString(),
+      });
+
+      const incomingN: Msg[] = incoming.map(norm);
+      const updatesN: Msg[] = updates.map(norm);
+
+      if (!incomingN.length && !updatesN.length) {
         if (data?.now) sinceRef.current = data.now;
         return;
       }
 
-      router.refresh();
+      if (incomingN.length || updatesN.length) refreshSidebarSoon();
 
       const wasAtBottom = isUserAtBottomRef.current;
 
       setMessages((prev) => {
-        const map = new Map(prev.map((m) => [m.id, m] as const));
+        const byId = new Map(prev.map((m) => [m.id, m] as const));
 
-        for (const u of updates) {
-          const old = map.get(u.id);
-          map.set(u.id, { ...(old ?? u), ...u });
+        // aplica updates (status/palomitas)
+        for (const u of updatesN) {
+          const old = byId.get(u.id);
+          byId.set(u.id, { ...(old ?? u), ...u });
         }
 
-        for (const m of incoming) {
-          if (!map.has(m.id)) map.set(m.id, m);
+        // agrega incoming nuevos
+        for (const m of incomingN) {
+          if (!byId.has(m.id)) byId.set(m.id, m);
         }
 
-        const merged = Array.from(map.values());
-        merged.sort(
+        // mantiene el orden actual + agrega nuevos al final
+        const prevIds = new Set(prev.map((m) => m.id));
+        const next = prev.map((m) => byId.get(m.id)!).filter(Boolean);
+
+        const added = incomingN.filter((m) => !prevIds.has(m.id));
+        added.sort(
           (a, b) =>
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
 
-        lastIdRef.current = merged.at(-1)?.id ?? lastIdRef.current;
-        return merged;
+        next.push(...added);
+
+        lastIdRef.current = next.at(-1)?.id ?? lastIdRef.current;
+        return next;
       });
 
       if (data?.now) sinceRef.current = data.now;
@@ -256,7 +281,7 @@ export default function MessagesList({
         await markReadIfNeeded(lastIdRef.current);
         setNewMessagesCount(0);
       } else {
-        if (incoming.length) setNewMessagesCount((c) => c + incoming.length);
+        if (incomingN.length) setNewMessagesCount((c) => c + incomingN.length);
       }
     } finally {
       lastRTTRef.current = performance.now() - t0;
@@ -331,11 +356,18 @@ export default function MessagesList({
             return (
               <div key={m.id}>
                 {showDayChip && (
-                  <div className="mx-auto my-2 w-fit rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/70 border border-white/10">
-                    {formatDayChip(m.createdAt) === "Hoy" ? (
-                      <span className="font-semibold text-white/80">Hoy</span>
+                  <div
+                    className="mx-auto my-2 w-fit rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/70 border border-white/10"
+                    suppressHydrationWarning
+                  >
+                    {mounted ? (
+                      formatDayChip(m.createdAt) === "Hoy" ? (
+                        <span className="font-semibold text-white/80">Hoy</span>
+                      ) : (
+                        formatDayChip(m.createdAt)
+                      )
                     ) : (
-                      formatDayChip(m.createdAt)
+                      ""
                     )}
                   </div>
                 )}
@@ -348,11 +380,13 @@ export default function MessagesList({
 
                   {/* footer WA: hora + ticks pegados */}
                   <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-white/60">
-                    <span>
-                      {new Date(m.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                    <span suppressHydrationWarning>
+                      {mounted
+                        ? new Date(m.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : ""}
                     </span>
 
                     {outbound && (

@@ -38,11 +38,6 @@ function extractWhatsappMessage(payload: any) {
   };
 }
 
-/**
- * WhatsApp status webhooks: delivered / read (and sometimes sent)
- * Updates outbound messages by providerMessageId (wamid).
- * Returns how many status items were processed.
- */
 async function handleWhatsappStatuses(businessId: string, payload: any) {
   const entry = payload?.entry?.[0];
   const change = entry?.changes?.[0];
@@ -55,7 +50,7 @@ async function handleWhatsappStatuses(businessId: string, payload: any) {
 
   for (const s of statuses) {
     const wamid = s?.id ? String(s.id) : null;
-    const status = s?.status ? String(s.status) : null; // "sent" | "delivered" | "read"
+    const status = s?.status ? String(s.status) : null;
     const ts = s?.timestamp ? new Date(Number(s.timestamp) * 1000) : new Date();
 
     if (!wamid || !status) continue;
@@ -68,7 +63,7 @@ async function handleWhatsappStatuses(businessId: string, payload: any) {
           providerMessageId: wamid,
           direction: "OUTBOUND",
         },
-        data: { status: "DELIVERED", deliveredAt: ts },
+        data: { status: "DELIVERED", deliveredAt: ts, updatedAt: new Date() },
       });
       processed++;
       continue;
@@ -82,14 +77,13 @@ async function handleWhatsappStatuses(businessId: string, payload: any) {
           providerMessageId: wamid,
           direction: "OUTBOUND",
         },
-        data: { status: "READ", readAt: ts },
+        data: { status: "READ", readAt: ts, updatedAt: new Date() },
       });
       processed++;
       continue;
     }
 
     if (status === "sent") {
-      // opcional: por si llega status "sent" vía webhook
       await prisma.message.updateMany({
         where: {
           businessId,
@@ -97,7 +91,7 @@ async function handleWhatsappStatuses(businessId: string, payload: any) {
           providerMessageId: wamid,
           direction: "OUTBOUND",
         },
-        data: { status: "SENT" },
+        data: { status: "SENT", updatedAt: new Date() },
       });
       processed++;
       continue;
@@ -154,11 +148,21 @@ export async function POST(req: Request) {
   });
 
   try {
-    // 1) Primero procesamos statuses (palomitas)
     const statusesProcessed = await handleWhatsappStatuses(businessId, payload);
 
-    // 2) Luego procesamos inbound messages como ya lo haces
     const extracted = extractWhatsappMessage(payload);
+
+    console.log("[WA] extracted", {
+      businessId,
+      eventType: extracted?.eventType,
+      fromPhone: extracted?.fromPhone,
+      toPhone: extracted?.toPhone,
+      providerMessageId: extracted?.providerMessageId,
+      text: extracted?.text,
+      hasStatuses: Array.isArray(
+        payload?.entry?.[0]?.changes?.[0]?.value?.statuses
+      ),
+    });
 
     if (!extracted) {
       await prisma.webhookEvent.update({
@@ -194,8 +198,17 @@ export async function POST(req: Request) {
       select: { id: true },
     });
 
-    await prisma.message
-      .create({
+    console.log("[WA] conversation upserted", {
+      businessId,
+      contactPhone,
+      conversationId: conversation.id,
+    });
+
+    let createdMessageId: string | null = null;
+    let duplicate = false;
+
+    try {
+      const created = await prisma.message.create({
         data: {
           businessId,
           conversationId: conversation.id,
@@ -206,20 +219,52 @@ export async function POST(req: Request) {
           toPhone: extracted.toPhone,
           text: extracted.text,
           payload: extracted.rawMessage,
-
-          // 👇 opcional pero recomendado para que INBOUND no quede como QUEUED
           status: "SENT",
         },
-      })
-      .catch(async (err: any) => {
-        if (err?.code === "P2002") return; // idempotencia provider+providerMessageId
-        throw err;
+        select: { id: true },
       });
+
+      createdMessageId = created.id;
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        duplicate = true;
+      } else {
+        throw err;
+      }
+    }
+
+    console.log("[WA] message write", {
+      businessId,
+      conversationId: conversation.id,
+      providerMessageId: extracted.providerMessageId,
+      createdMessageId,
+      duplicate,
+    });
+
+    if (!duplicate) {
+      const updatedConversation = await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          unreadCount: { increment: 1 },
+          lastMessageAt: new Date(),
+        },
+        select: {
+          unreadCount: true,
+        },
+      });
+
+      console.log("[WA] unreadCount++", {
+        conversationId: conversation.id,
+        unreadCount: updatedConversation.unreadCount,
+      });
+    }
 
     await prisma.webhookEvent.update({
       where: { id: raw.id },
       data: { status: "PROCESSED", processedAt: new Date() },
     });
+
+    console.log("[WA] processed", { rawEventId: raw.id, statusesProcessed });
 
     return NextResponse.json({
       ok: true,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 type SidebarItem = {
   id: string;
@@ -14,7 +14,6 @@ type SidebarItem = {
 };
 
 function formatTime(iso: string) {
-  // WhatsApp: si es hoy -> HH:MM, si no -> DD/MM
   const d = new Date(iso);
   const now = new Date();
 
@@ -91,6 +90,7 @@ export default function Sidebar({
   activeId: string | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const activeFromPath = pathname?.startsWith("/inbox/")
     ? pathname.split("/inbox/")[1]?.split("/")[0]
@@ -100,6 +100,16 @@ export default function Sidebar({
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/inbox")) return;
+
+    const t = setInterval(() => {
+      router.refresh();
+    }, 1500);
+
+    return () => clearInterval(t);
+  }, [router, pathname]);
 
   useEffect(() => {
     if (!effectiveActiveId) return;

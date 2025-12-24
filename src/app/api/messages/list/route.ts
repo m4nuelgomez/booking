@@ -56,8 +56,8 @@ export async function GET(req: NextRequest) {
             direction: "OUTBOUND",
             updatedAt: { gt: sinceDate! },
           },
-          orderBy: { createdAt: "asc" },
-          take: TAKE,
+          orderBy: { updatedAt: "asc" },
+          take: 200,
           select,
         })
       : [];
@@ -65,12 +65,12 @@ export async function GET(req: NextRequest) {
     let messages: any[] = [];
 
     if (after) {
-      const cursorOk = await prisma.message.findFirst({
+      const cursorMsg = await prisma.message.findFirst({
         where: { id: after, conversationId, businessId: DEFAULT_BUSINESS_ID },
-        select: { id: true },
+        select: { id: true, createdAt: true },
       });
 
-      if (!cursorOk) {
+      if (!cursorMsg) {
         return NextResponse.json(
           { ok: false, error: "Invalid cursor (after)" },
           { status: 400 }
@@ -78,17 +78,27 @@ export async function GET(req: NextRequest) {
       }
 
       messages = await prisma.message.findMany({
-        where: { conversationId, businessId: DEFAULT_BUSINESS_ID },
-        orderBy: { createdAt: "asc" },
-        cursor: { id: after },
-        skip: 1,
+        where: {
+          conversationId,
+          businessId: DEFAULT_BUSINESS_ID,
+          OR: [
+            { createdAt: { gt: cursorMsg.createdAt } },
+            {
+              AND: [
+                { createdAt: { equals: cursorMsg.createdAt } },
+                { id: { gt: cursorMsg.id } },
+              ],
+            },
+          ],
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         take: TAKE,
         select,
       });
     } else {
       const latest = await prisma.message.findMany({
         where: { conversationId, businessId: DEFAULT_BUSINESS_ID },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: TAKE,
         select,
       });

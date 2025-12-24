@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Sidebar from "./Sidebar";
 import { headers } from "next/headers";
+import LogoutButton from "./LogoutButton";
 
 export default async function InboxLayout({
   children,
@@ -55,8 +56,17 @@ export default async function InboxLayout({
       <div className="h-full w-full wa-wallpaper">
         <div className="h-full max-w-375 mx-auto px-4 py-4">
           <div className="h-full grid grid-cols-[380px_1fr] gap-4">
-            <aside className="wa-panel overflow-hidden">
-              <Sidebar items={items} activeId={activeId} />
+            <aside className="wa-panel overflow-hidden flex flex-col">
+              {/* ✅ Header del sidebar */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="text-sm font-semibold text-white">Booking</div>
+                <LogoutButton />
+              </div>
+
+              {/* ✅ Sidebar ocupa el resto */}
+              <div className="min-h-0 flex-1">
+                <Sidebar items={items} activeId={activeId} />
+              </div>
             </aside>
 
             <section className="wa-panel overflow-hidden min-w-0">

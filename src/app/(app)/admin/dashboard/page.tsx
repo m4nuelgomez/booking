@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import DashboardAutoRefresh from "./DashboardAutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +34,14 @@ export default async function AdminDashboardPage() {
   const from = startOfToday();
   const to = startOfTomorrow();
 
-  // KPIs globales (no por negocio)
   const [
     businessCount,
     messages24h,
     inbound24h,
     outbound24h,
-    unreadConvos, // si Conversation no existe o no tiene unreadCount, comenta este bloque
-    apptsToday, // si Appointment existe con startsAt/status, perfecto; si no, comenta
+    unreadConvos,
+    unreadAgg,
+    apptsToday,
     topBusinesses,
   ] = await Promise.all([
     prisma.business.count(),
@@ -57,12 +58,14 @@ export default async function AdminDashboardPage() {
       where: { createdAt: { gte: since }, direction: "OUTBOUND" },
     }),
 
-    // ✅ Si tu modelo Conversation existe y tiene unreadCount (por lo que me dijiste, sí)
     prisma.conversation.count({
       where: { unreadCount: { gt: 0 } },
     }),
 
-    // ✅ Si tu modelo Appointment existe con startsAt/status (tú lo usas en dashboard del negocio)
+    prisma.conversation.aggregate({
+      _sum: { unreadCount: true },
+    }),
+
     prisma.appointment.count({
       where: {
         startsAt: { gte: from, lt: to },
@@ -70,7 +73,6 @@ export default async function AdminDashboardPage() {
       },
     }),
 
-    // ✅ Esto usa SOLO campos/relaciones que Prisma te marcó como disponibles
     prisma.business.findMany({
       orderBy: { createdAt: "desc" },
       take: 25,
@@ -90,6 +92,8 @@ export default async function AdminDashboardPage() {
       },
     }),
   ]);
+
+  const unreadTotal = unreadAgg._sum.unreadCount ?? 0;
 
   const potentialMRR = businessCount * PRICE_MXN;
 
@@ -133,6 +137,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="p-6 space-y-8">
+      <DashboardAutoRefresh intervalMs={3000} visibleOnly />
       {/* Header */}
       <div className="flex items-end justify-between gap-4">
         <div>
@@ -145,13 +150,14 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
         <Kpi label="Negocios" value={businessCount} />
         <Kpi label="Mensajes 24h" value={messages24h} />
         <Kpi label="Inbound 24h" value={`${pctIn}%`} />
         <Kpi label="Outbound 24h" value={`${pctOut}%`} />
         <Kpi label="Citas hoy" value={apptsToday} />
-        <Kpi label="MRR Potencial" value={`$${potentialMRR}`} />
+        <Kpi label="Conv. con unread" value={unreadConvos} />
+        <Kpi label="Mensajes sin leer" value={unreadTotal} /> {/* 👈 AQUÍ */}
       </div>
 
       {/* Salud */}

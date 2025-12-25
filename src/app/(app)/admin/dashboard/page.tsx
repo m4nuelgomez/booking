@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
 import DashboardAutoRefresh from "./DashboardAutoRefresh";
 
 export const dynamic = "force-dynamic";
@@ -38,22 +37,18 @@ type Row = {
   createdAt: Date;
 };
 
-type BusinessRow = Prisma.BusinessGetPayload<{
-  select: {
-    id: true;
-    name: true;
-    createdAt: true;
-    waAccounts: { select: { id: true } };
-    _count: {
-      select: {
-        messages: true;
-        clients: true;
-        outbox: true;
-        webhookEvents: true;
-      };
-    };
+type BusinessRow = {
+  id: string;
+  name: string;
+  createdAt: Date;
+  waAccounts: { id: string }[];
+  _count: {
+    messages: number;
+    clients: number;
+    outbox: number;
+    webhookEvents: number;
   };
-}>;
+};
 
 /* =========================
    PAGE

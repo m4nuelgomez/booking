@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
 function NavItem({
   href,
@@ -27,6 +28,15 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const _cookieStore = await cookies();
+
+  const businessId = _cookieStore.get("booking_bid")?.value;
+
+  const business = businessId
+    ? await prisma.business.findUnique({
+        where: { id: businessId },
+        select: { name: true },
+      })
+    : null;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -64,7 +74,9 @@ export default async function DashboardLayout({
             <div className="flex items-center justify-between px-6 py-4">
               <div>
                 <div className="text-sm text-zinc-400">Negocio</div>
-                <div className="text-lg font-semibold">Demo Business</div>
+                <div className="text-lg font-semibold">
+                  {business?.name ?? "—"}
+                </div>
               </div>
 
               {/* WhatsApp status placeholder */}

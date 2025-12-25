@@ -6,6 +6,10 @@ import DashboardAutoRefresh from "./DashboardAutoRefresh";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  title: "Booking — Dashboard",
+};
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);

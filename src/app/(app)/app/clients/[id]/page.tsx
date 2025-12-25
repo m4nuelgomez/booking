@@ -5,6 +5,39 @@ import { requireBusinessId } from "@/lib/auth";
 import OpenClientChatButton from "./OpenClientChatButton";
 import CopyPhoneButton from "./CopyPhoneButton";
 
+type ClientAppointment = {
+  id: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  service: string | null;
+  status: string;
+};
+
+type ClientConversationPreview = {
+  id: string;
+  lastMessageAt: Date | null;
+  messages: {
+    text: string | null;
+    direction: "INBOUND" | "OUTBOUND";
+    createdAt: Date;
+  }[];
+};
+
+type ClientDetail = {
+  id: string;
+  name: string | null;
+  phone: string;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  conversations: ClientConversationPreview[];
+  appointments: ClientAppointment[];
+  _count: {
+    appointments: number;
+    conversations: number;
+  };
+};
+
 function formatPhoneDisplay(raw: string) {
   const s = String(raw ?? "").trim();
   if (!s) return "";
@@ -81,7 +114,7 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const businessId = await requireBusinessId();
 
-  const client = await prisma.client.findFirst({
+  const client: ClientDetail | null = await prisma.client.findFirst({
     where: { id, businessId },
     select: {
       id: true,
@@ -313,7 +346,7 @@ export default async function ClientDetailPage({
               </Link>
             </div>
 
-            {client.appointments.length === 0 ? (
+            {(client.appointments?.length ?? 0) === 0 ? (
               <div className="px-4 py-8 text-sm text-zinc-400">
                 <div className="mb-3">Aún no hay citas. Agenda la primera.</div>
                 <Link
@@ -325,7 +358,7 @@ export default async function ClientDetailPage({
               </div>
             ) : (
               <ul className="divide-y divide-zinc-800">
-                {client.appointments.map((a) => (
+                {(client.appointments ?? []).map((a) => (
                   <li key={a.id} className="px-4 py-4">
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">

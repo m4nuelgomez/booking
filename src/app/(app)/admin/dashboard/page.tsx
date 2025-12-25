@@ -22,6 +22,10 @@ function startOfTomorrow() {
 const DAY = 24 * 60 * 60 * 1000;
 const PRICE_MXN = 399;
 
+/* =========================
+   TYPES
+========================= */
+
 type Row = {
   id: string;
   name: string;
@@ -51,10 +55,16 @@ type BusinessRow = Prisma.BusinessGetPayload<{
   };
 }>;
 
+/* =========================
+   PAGE
+========================= */
+
 export default async function AdminDashboardPage() {
   const since = new Date(Date.now() - DAY);
   const from = startOfToday();
   const to = startOfTomorrow();
+
+  /* -------- KPIs (Promise.all solo con scalars) -------- */
 
   const [
     businessCount,
@@ -64,7 +74,6 @@ export default async function AdminDashboardPage() {
     unreadConvos,
     unreadAgg,
     apptsToday,
-    topBusinesses,
   ] = await Promise.all([
     prisma.business.count(),
 
@@ -94,41 +103,47 @@ export default async function AdminDashboardPage() {
         status: "SCHEDULED",
       },
     }),
-
-    prisma.business.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        waAccounts: { select: { id: true } }, // ✅ existe
-        _count: {
-          select: {
-            messages: true, // ✅ existe
-            clients: true, // ✅ existe
-            outbox: true, // ✅ existe
-            webhookEvents: true, // ✅ existe
-          },
-        },
-      },
-    }),
   ]);
 
-  const unreadTotal = unreadAgg._sum.unreadCount ?? 0;
+  /* -------- Negocios (query tipada, SIN Promise.all) -------- */
 
+  const topBusinesses: BusinessRow[] = await prisma.business.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    select: {
+      id: true,
+      name: true,
+      createdAt: true,
+      waAccounts: { select: { id: true } },
+      _count: {
+        select: {
+          messages: true,
+          clients: true,
+          outbox: true,
+          webhookEvents: true,
+        },
+      },
+    },
+  });
+
+  /* -------- Derived values -------- */
+
+  const unreadTotal = unreadAgg._sum.unreadCount ?? 0;
   const potentialMRR = businessCount * PRICE_MXN;
 
   const pctOut =
     messages24h === 0 ? 0 : Math.round((outbound24h / messages24h) * 100);
   const pctIn = messages24h === 0 ? 0 : 100 - pctOut;
 
-  const rows: Row[] = topBusinesses.map((b: BusinessRow) => {
+  /* -------- Rows (100% typed) -------- */
+
+  const rows: Row[] = topBusinesses.map((b) => {
     const msgs = b._count.messages;
     const clients = b._count.clients;
     const outbox = b._count.outbox;
     const webhook = b._count.webhookEvents;
     const waLinked = b.waAccounts.length > 0;
+
     const status: Row["status"] = msgs > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
 
     return {
@@ -144,7 +159,6 @@ export default async function AdminDashboardPage() {
     };
   });
 
-  // Orden simple: más mensajes primero, luego más clientes
   rows.sort((a, b) => {
     if (b.msgsTotal !== a.msgsTotal) return b.msgsTotal - a.msgsTotal;
     if (b.clientsTotal !== a.clientsTotal)
@@ -152,9 +166,14 @@ export default async function AdminDashboardPage() {
     return b.createdAt.getTime() - a.createdAt.getTime();
   });
 
+  /* =========================
+     RENDER
+  ========================= */
+
   return (
     <div className="p-6 space-y-8">
       <DashboardAutoRefresh intervalMs={3000} visibleOnly />
+
       {/* Header */}
       <div className="flex items-end justify-between gap-4">
         <div>
@@ -174,7 +193,7 @@ export default async function AdminDashboardPage() {
         <Kpi label="Outbound 24h" value={`${pctOut}%`} />
         <Kpi label="Citas hoy" value={apptsToday} />
         <Kpi label="Conv. con unread" value={unreadConvos} />
-        <Kpi label="Mensajes sin leer" value={unreadTotal} /> {/* 👈 AQUÍ */}
+        <Kpi label="Mensajes sin leer" value={unreadTotal} />
       </div>
 
       {/* Salud */}
@@ -243,27 +262,29 @@ export default async function AdminDashboardPage() {
                 </tr>
               ))}
 
-              {rows.length === 0 ? (
+              {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-zinc-400" colSpan={8}>
+                  <td colSpan={8} className="px-4 py-8 text-zinc-400">
                     Aún no hay negocios.
                   </td>
                 </tr>
-              ) : null}
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Nota v2 */}
       <div className="text-xs text-zinc-500">
-        Nota: esta v1 usa conteos totales por negocio (rápido y robusto). En v2
-        agregamos “mensajes 24h por negocio” con groupBy cuando confirmemos el
-        campo businessId en Message o la relación exacta.
+        Nota: v1 usa conteos totales por negocio. En v2 agregamos métricas 24h
+        por negocio con groupBy.
       </div>
     </div>
   );
 }
+
+/* =========================
+   UI
+========================= */
 
 function Kpi({ label, value }: { label: string; value: any }) {
   return (

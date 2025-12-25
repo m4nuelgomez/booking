@@ -123,17 +123,12 @@ export default async function AdminDashboardPage() {
     messages24h === 0 ? 0 : Math.round((outbound24h / messages24h) * 100);
   const pctIn = messages24h === 0 ? 0 : 100 - pctOut;
 
-  // Tabla de negocios (v1: conteos totales por negocio)
   const rows: Row[] = topBusinesses.map((b: BusinessRow) => {
     const msgs = b._count.messages;
     const clients = b._count.clients;
     const outbox = b._count.outbox;
     const webhook = b._count.webhookEvents;
     const waLinked = b.waAccounts.length > 0;
-
-    // 🟢 ya usa el sistema (tiene mensajes)
-    // 🟡 tiene algo (clientes) pero no mensajes
-    // 🔴 no hay nada (muerto)
     const status: Row["status"] = msgs > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
 
     return {

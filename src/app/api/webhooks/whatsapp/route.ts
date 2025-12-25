@@ -147,7 +147,7 @@ export async function GET(req: Request) {
   const expected = process.env.WHATSAPP_VERIFY_TOKEN;
 
   if (!expected) {
-    return new NextResponse("OK (no verify token configured)", { status: 200 });
+    return new NextResponse("Missing WHATSAPP_VERIFY_TOKEN", { status: 500 });
   }
 
   if (mode === "subscribe" && token === expected && challenge) {
@@ -171,7 +171,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // ✅ resolver tenant + toPhone con fallback a WhatsAppAccount.displayNumber
   let businessId: string;
   let toPhone: string;
   let phoneNumberId: string;

@@ -137,27 +137,29 @@ export default async function AdminDashboardPage() {
 
   /* -------- Rows (100% typed) -------- */
 
-  const rows: Row[] = topBusinesses.map((b) => {
-    const msgs = b._count.messages;
-    const clients = b._count.clients;
-    const outbox = b._count.outbox;
-    const webhook = b._count.webhookEvents;
-    const waLinked = b.waAccounts.length > 0;
+  const rows: Row[] = (topBusinesses as BusinessRow[]).map(
+    (b: BusinessRow): Row => {
+      const msgs = b._count.messages;
+      const clients = b._count.clients;
+      const outbox = b._count.outbox;
+      const webhook = b._count.webhookEvents;
+      const waLinked = b.waAccounts.length > 0;
 
-    const status: Row["status"] = msgs > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
+      const status: Row["status"] = msgs > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
 
-    return {
-      id: b.id,
-      name: b.name,
-      status,
-      msgsTotal: msgs,
-      clientsTotal: clients,
-      outboxTotal: outbox,
-      webhookTotal: webhook,
-      waLinked,
-      createdAt: b.createdAt,
-    };
-  });
+      return {
+        id: b.id,
+        name: b.name,
+        status,
+        msgsTotal: msgs,
+        clientsTotal: clients,
+        outboxTotal: outbox,
+        webhookTotal: webhook,
+        waLinked,
+        createdAt: b.createdAt,
+      };
+    }
+  );
 
   rows.sort((a, b) => {
     if (b.msgsTotal !== a.msgsTotal) return b.msgsTotal - a.msgsTotal;

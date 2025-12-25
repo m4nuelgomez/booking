@@ -159,7 +159,7 @@ export default async function AdminDashboardPage() {
     };
   });
 
-  rows.sort((a, b) => {
+  rows.sort((a: Row, b: Row) => {
     if (b.msgsTotal !== a.msgsTotal) return b.msgsTotal - a.msgsTotal;
     if (b.clientsTotal !== a.clientsTotal)
       return b.clientsTotal - a.clientsTotal;

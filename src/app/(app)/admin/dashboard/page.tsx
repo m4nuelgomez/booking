@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import DashboardAutoRefresh from "./DashboardAutoRefresh";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,23 @@ type Row = {
   waLinked: boolean;
   createdAt: Date;
 };
+
+type BusinessRow = Prisma.BusinessGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    createdAt: true;
+    waAccounts: { select: { id: true } };
+    _count: {
+      select: {
+        messages: true;
+        clients: true;
+        outbox: true;
+        webhookEvents: true;
+      };
+    };
+  };
+}>;
 
 export default async function AdminDashboardPage() {
   const since = new Date(Date.now() - DAY);
@@ -106,7 +124,7 @@ export default async function AdminDashboardPage() {
   const pctIn = messages24h === 0 ? 0 : 100 - pctOut;
 
   // Tabla de negocios (v1: conteos totales por negocio)
-  const rows: Row[] = topBusinesses.map((b) => {
+  const rows: Row[] = topBusinesses.map((b: BusinessRow) => {
     const msgs = b._count.messages;
     const clients = b._count.clients;
     const outbox = b._count.outbox;

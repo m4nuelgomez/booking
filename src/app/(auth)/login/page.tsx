@@ -22,7 +22,7 @@ export default async function LoginPage({
 
     if (!bid) redirect("/onboarding");
 
-    redirect("/inbox");
+    redirect("/app/inbox");
   }
 
   return (

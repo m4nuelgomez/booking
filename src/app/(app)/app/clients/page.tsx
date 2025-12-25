@@ -108,7 +108,7 @@ export default async function ClientsPage({
       {/* ✅ Back to Dashboard (orientación) */}
       <div className="pt-2">
         <Link
-          href="/dashboard"
+          href="/app/dashboard"
           className="inline-flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300"
         >
           ← Dashboard
@@ -124,14 +124,14 @@ export default async function ClientsPage({
 
         <div className="flex items-center gap-2">
           <Link
-            href="/clients/new"
+            href="/app/clients/new"
             className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
           >
             Nuevo cliente
           </Link>
 
           {/* Search: mantiene q (y opcionalmente selected si quieres) */}
-          <form action="/clients" className="flex items-center">
+          <form action="/app/clients" className="flex items-center">
             {selected ? (
               <input type="hidden" name="selected" value={selected} />
             ) : null}
@@ -170,7 +170,7 @@ export default async function ClientsPage({
                 const name = c.name ?? c.phone;
                 const isSelected = selectedClient?.id === c.id;
 
-                const href = `/clients?${new URLSearchParams({
+                const href = `/app/clients?${new URLSearchParams({
                   ...(query ? { q: query } : {}),
                   selected: c.id,
                 }).toString()}`;
@@ -268,14 +268,14 @@ export default async function ClientsPage({
 
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/clients/${selectedClient.id}`}
+                    href={`/app/clients/${selectedClient.id}`}
                     className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
                   >
                     Abrir
                   </Link>
                   <Link
                     href={
-                      selectedConvo?.id ? `/inbox/${selectedConvo.id}` : "#"
+                      selectedConvo?.id ? `/app/inbox/${selectedConvo.id}` : "#"
                     }
                     className={[
                       "rounded-lg px-3 py-2 text-sm",

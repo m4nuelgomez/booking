@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     select: { id: true },
   });
 
-  const redirectTo = next ?? "/inbox";
+  const redirectTo = next ?? "/app/inbox";
   const res = NextResponse.json({
     ok: true,
     businessId: business.id,

@@ -33,7 +33,7 @@ export default function OnboardingForm({ next }: { next: string }) {
       const redirectTo =
         typeof data?.redirectTo === "string" && data.redirectTo.startsWith("/")
           ? data.redirectTo
-          : "/inbox";
+          : "/app/inbox";
 
       router.replace(redirectTo);
       router.refresh();

@@ -29,7 +29,7 @@ export default function LoginForm() {
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }
 
-      router.replace(next.startsWith("/") ? next : "/inbox");
+      router.replace(next.startsWith("/") ? next : "/app/inbox");
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? "Login failed");

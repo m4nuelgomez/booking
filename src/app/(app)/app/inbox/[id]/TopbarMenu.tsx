@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 export default function TopbarMenu({
-  dashboardHref = "/dashboard",
+  dashboardHref = "/app/dashboard",
   logoutEndpoint = "/api/auth/logout",
 }: {
   dashboardHref?: string;

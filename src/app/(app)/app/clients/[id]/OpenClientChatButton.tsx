@@ -15,7 +15,7 @@ export default function OpenClientChatButton({
 
   async function onOpen() {
     if (existingConversationId) {
-      router.push(`/inbox/${existingConversationId}`);
+      router.push(`/app/inbox/${existingConversationId}`);
       return;
     }
 
@@ -32,7 +32,7 @@ export default function OpenClientChatButton({
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }
 
-      router.push(`/inbox/${data.conversationId}`);
+      router.push(`/app/inbox/${data.conversationId}`);
     } catch (e: any) {
       alert(e?.message ?? "Failed to open chat");
     } finally {

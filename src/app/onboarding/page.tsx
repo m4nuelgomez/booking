@@ -24,7 +24,7 @@ export default async function OnboardingPage({
     redirect(`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
 
   // si ya hay negocio seleccionado, no tiene sentido estar aquí
-  if (bid) redirect(next ?? "/inbox");
+  if (bid) redirect(next ?? "/app/inbox");
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
@@ -37,7 +37,7 @@ export default async function OnboardingPage({
         </p>
 
         <div className="mt-6">
-          <OnboardingForm next={next ?? "/inbox"} />
+          <OnboardingForm next={next ?? "/app/inbox"} />
         </div>
       </div>
     </main>

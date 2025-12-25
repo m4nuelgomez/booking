@@ -265,7 +265,7 @@ export default function AgendaPage() {
           {/* Actions Row */}
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <Link
-              href="/dashboard"
+              href="/app/dashboard"
               className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
             >
               <span aria-hidden>←</span>

@@ -37,7 +37,7 @@ export function AppointmentCard({
           </div>
 
           <Link
-            href={`/inbox/${conversationId}?schedule=1`}
+            href={`/app/inbox/${conversationId}?schedule=1`}
             className="rounded-xl bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
           >
             Agendar ahora
@@ -66,13 +66,13 @@ export function AppointmentCard({
 
         <div className="flex shrink-0 gap-2">
           <Link
-            href={`/agenda?appointmentId=${nextAppt.id}`}
+            href={`/app/agenda?appointmentId=${nextAppt.id}`}
             className="rounded-xl bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
           >
             Ver
           </Link>
           <Link
-            href={`/inbox/${conversationId}?schedule=1&reschedule=${nextAppt.id}`}
+            href={`/app/inbox/${conversationId}?schedule=1&reschedule=${nextAppt.id}`}
             className="rounded-xl bg-white/10 px-3 py-2 text-sm hover:bg-white/15"
           >
             Reagendar

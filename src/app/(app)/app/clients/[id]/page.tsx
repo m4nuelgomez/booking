@@ -153,7 +153,7 @@ export default async function ClientDetailPage({
               {/* Left */}
               <div className="min-w-0 max-w-3xl">
                 <Link
-                  href="/clients"
+                  href="/app/clients"
                   className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"
                 >
                   <span className="text-zinc-500">←</span>
@@ -224,7 +224,7 @@ export default async function ClientDetailPage({
                 />
 
                 <Link
-                  href={`/agenda?clientId=${client.id}`}
+                  href={`/app/agenda?clientId=${client.id}`}
                   className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
                   title="Agendar una cita para este cliente"
                 >
@@ -246,7 +246,7 @@ export default async function ClientDetailPage({
               <Link
                 href={
                   existingConversationId
-                    ? `/inbox/${existingConversationId}`
+                    ? `/app/inbox/${existingConversationId}`
                     : "#"
                 }
                 className={`text-sm ${
@@ -306,7 +306,7 @@ export default async function ClientDetailPage({
             <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
               <div className="text-sm font-medium text-zinc-200">Citas</div>
               <Link
-                href={`/agenda?clientId=${client.id}`}
+                href={`/app/agenda?clientId=${client.id}`}
                 className="text-sm text-emerald-400 hover:text-emerald-300"
               >
                 Ver en agenda
@@ -317,7 +317,7 @@ export default async function ClientDetailPage({
               <div className="px-4 py-8 text-sm text-zinc-400">
                 <div className="mb-3">Aún no hay citas. Agenda la primera.</div>
                 <Link
-                  href={`/agenda?clientId=${client.id}`}
+                  href={`/app/agenda?clientId=${client.id}`}
                   className="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500"
                 >
                   Agendar cita
@@ -344,7 +344,7 @@ export default async function ClientDetailPage({
                         <span className={statusPill(a.status)}>{a.status}</span>
                         {existingConversationId ? (
                           <Link
-                            href={`/inbox/${existingConversationId}`}
+                            href={`/app/inbox/${existingConversationId}`}
                             className="text-sm text-zinc-300 hover:text-white"
                           >
                             Chat
@@ -407,7 +407,7 @@ export default async function ClientDetailPage({
               <CopyPhoneButton phone={client.phone} />
 
               <Link
-                href="/clients"
+                href="/app/clients"
                 className="flex w-full items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
               >
                 Volver

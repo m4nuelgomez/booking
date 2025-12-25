@@ -89,7 +89,7 @@ export default async function DashboardPage() {
           <div className="mt-2 text-3xl font-semibold">{apptToday}</div>
           <div className="mt-3">
             <Link
-              href="/agenda"
+              href="/app/agenda"
               className="text-sm text-emerald-400 hover:underline"
             >
               Ver agenda
@@ -102,7 +102,7 @@ export default async function DashboardPage() {
           <div className="mt-2 text-3xl font-semibold">{unread}</div>
           <div className="mt-3">
             <Link
-              href="/inbox"
+              href="/app/inbox"
               className="text-sm text-emerald-400 hover:underline"
             >
               Abrir inbox
@@ -115,7 +115,7 @@ export default async function DashboardPage() {
           <div className="mt-2 text-3xl font-semibold">{nextAppts.length}</div>
           <div className="mt-3">
             <Link
-              href="/agenda"
+              href="/app/agenda"
               className="text-sm text-emerald-400 hover:underline"
             >
               Agendar nueva
@@ -128,7 +128,7 @@ export default async function DashboardPage() {
           <div className="mt-2 text-3xl font-semibold">→</div>
           <div className="mt-3">
             <Link
-              href="/clients"
+              href="/app/clients"
               className="text-sm text-emerald-400 hover:underline"
             >
               Ver clientes
@@ -143,7 +143,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
           <div className="text-sm text-zinc-300">Próximas citas</div>
           <Link
-            href="/agenda"
+            href="/app/agenda"
             className="text-sm text-emerald-400 hover:underline"
           >
             Ver todo
@@ -173,7 +173,7 @@ export default async function DashboardPage() {
                     <div className="flex gap-2">
                       {a.conversationId ? (
                         <Link
-                          href={`/inbox/${a.conversationId}`}
+                          href={`/app/inbox/${a.conversationId}`}
                           className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
                         >
                           Chat
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
 
                       {a.client?.id ? (
                         <Link
-                          href={`/clients/${a.client.id}`}
+                          href={`/app/clients/${a.client.id}`}
                           className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
                         >
                           Cliente
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
           <div className="text-sm text-zinc-300">Conversaciones recientes</div>
           <Link
-            href="/inbox"
+            href="/app/inbox"
             className="text-sm text-emerald-400 hover:underline"
           >
             Abrir inbox
@@ -241,7 +241,7 @@ export default async function DashboardPage() {
                         </span>
                       ) : null}
                       <Link
-                        href={`/inbox/${c.id}`}
+                        href={`/app/inbox/${c.id}`}
                         className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
                       >
                         Abrir

@@ -18,7 +18,7 @@ export function ChatButton({
     setError(null);
 
     if (existingConversationId) {
-      router.push(`/inbox/${existingConversationId}`);
+      router.push(`/app/inbox/${existingConversationId}`);
       return;
     }
 
@@ -35,7 +35,7 @@ export function ChatButton({
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }
 
-      router.push(`/inbox/${data.conversationId}`);
+      router.push(`/app/inbox/${data.conversationId}`);
     } catch (e: any) {
       setError(e?.message ?? "No se pudo abrir el chat");
     } finally {

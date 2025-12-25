@@ -141,7 +141,7 @@ export function AppointmentCard({ it, loading = false }: Props) {
       if (!res.ok || !data?.ok)
         throw new Error(data?.error ?? `HTTP ${res.status}`);
 
-      router.push(`/inbox/${data.conversationId}`);
+      router.push(`/app/inbox/${data.conversationId}`);
     } catch (e: any) {
       setErr(e?.message ?? "Error");
     } finally {

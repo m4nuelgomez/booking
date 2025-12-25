@@ -39,10 +39,10 @@ export default async function DashboardLayout({
           </div>
 
           <nav className="space-y-1">
-            <NavItem href="/dashboard" label="Dashboard" icon="🏠" />
-            <NavItem href="/inbox" label="Inbox" icon="💬" />
-            <NavItem href="/agenda" label="Agenda" icon="📅" />
-            <NavItem href="/clients" label="Clientes" icon="👥" />
+            <NavItem href="/app/dashboard" label="Dashboard" icon="🏠" />
+            <NavItem href="/app/inbox" label="Inbox" icon="💬" />
+            <NavItem href="/app/agenda" label="Agenda" icon="📅" />
+            <NavItem href="/app/clients" label="Clientes" icon="👥" />
 
             <div className="my-3 border-t border-zinc-800" />
 

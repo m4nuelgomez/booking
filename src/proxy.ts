@@ -6,7 +6,6 @@ const BIZ_COOKIE = "booking_bid";
 export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // ✅ Nunca interceptar API (excepto webhooks si quieres, pero igual no hace falta)
   if (pathname.startsWith("/api")) return NextResponse.next();
 
   if (
@@ -19,14 +18,10 @@ export default function middleware(req: NextRequest) {
   }
 
   const isProtected =
-    pathname === "/inbox" ||
-    pathname.startsWith("/inbox/") ||
-    pathname === "/dashboard" ||
-    pathname.startsWith("/dashboard/") ||
-    pathname === "/agenda" ||
-    pathname.startsWith("/agenda/") ||
-    pathname === "/clients" ||
-    pathname.startsWith("/clients/");
+    pathname === "/app" ||
+    pathname.startsWith("/app/") ||
+    pathname === "/admin" ||
+    pathname.startsWith("/admin/");
 
   if (!isProtected) return NextResponse.next();
 
@@ -38,12 +33,16 @@ export default function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const bid = req.cookies.get(BIZ_COOKIE)?.value;
-  if (!bid) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/onboarding";
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+  const needsBusiness = pathname === "/app" || pathname.startsWith("/app/");
+
+  if (needsBusiness) {
+    const bid = req.cookies.get(BIZ_COOKIE)?.value;
+    if (!bid) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/onboarding";
+      url.searchParams.set("next", pathname);
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();

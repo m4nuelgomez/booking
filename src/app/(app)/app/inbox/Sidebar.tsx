@@ -93,8 +93,8 @@ export default function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
 
-  const activeFromPath = pathname?.startsWith("/inbox/")
-    ? pathname.split("/inbox/")[1]?.split("/")[0]
+  const activeFromPath = pathname?.startsWith("/app/inbox/")
+    ? pathname.split("/app/inbox/")[1]?.split("/")[0]
     : null;
 
   const effectiveActiveId = activeFromPath ?? activeId;
@@ -117,7 +117,7 @@ export default function Sidebar({
   }, [items]);
 
   useEffect(() => {
-    if (!pathname?.startsWith("/inbox")) return;
+    if (!pathname?.startsWith("/app/inbox")) return;
 
     const tick = () => {
       if (document.visibilityState !== "visible") return;
@@ -233,7 +233,7 @@ export default function Sidebar({
               return (
                 <li key={c.id} id={`convo-${c.id}`}>
                   <Link
-                    href={`/inbox/${c.id}`}
+                    href={`/app/inbox/${c.id}`}
                     className={[
                       "block no-underline text-inherit",
                       "px-3 py-2.5",

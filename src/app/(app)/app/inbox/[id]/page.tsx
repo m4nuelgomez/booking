@@ -117,7 +117,7 @@ export default async function ConversationPage({
           />
 
           <TopbarMenu
-            dashboardHref="/dashboard"
+            dashboardHref="/app/dashboard"
             logoutEndpoint="/api/auth/logout"
           />
         </div>

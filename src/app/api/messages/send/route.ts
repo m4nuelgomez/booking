@@ -1,26 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizePhone } from "@/lib/phone";
+import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
 export const runtime = "nodejs";
 
-function normalizeTo(toPhone: string) {
-  let digits = toPhone.replace(/\D/g, "");
+function toWhatsAppRecipient(canonicPhone: string) {
+  let digits = canonicPhone.replace(/\D/g, "");
 
   if (digits.startsWith("521") && digits.length === 13) {
     digits = "52" + digits.slice(3);
   }
 
+  if (!digits) throw new Error("Invalid recipient phone");
   return digits;
 }
 
-export async function POST(req: Request) {
-  const businessId = process.env.DEFAULT_BUSINESS_ID;
-  if (!businessId) {
+export async function POST(req: NextRequest) {
+  const auth = requireBusinessIdFromReq(req);
+  if (!auth.ok) {
     return NextResponse.json(
-      { ok: false, error: "Missing env DEFAULT_BUSINESS_ID" },
-      { status: 500 }
+      { ok: false, error: auth.error },
+      { status: auth.status }
     );
   }
+  const businessId = auth.businessId;
 
   let body: any;
   try {
@@ -44,7 +48,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Env de WhatsApp
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1) Validar conversación
+    // ✅ Validar conversación por tenant
     const convo = await prisma.conversation.findFirst({
       where: { id: conversationId, businessId },
       select: { id: true, contactPhone: true },
@@ -79,9 +82,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const toPhone = normalizeTo(convo.contactPhone);
+    const toPhone = normalizePhone(convo.contactPhone);
+    const waTo = toWhatsAppRecipient(toPhone);
 
-    // 2) Guardar Outbox + Message
+    const fromPhone = process.env.WHATSAPP_BUSINESS_NUMBER
+      ? normalizePhone(process.env.WHATSAPP_BUSINESS_NUMBER)
+      : "";
+
     const result = await prisma.$transaction(async (tx) => {
       const outbox = await tx.outboxMessage.create({
         data: {
@@ -104,30 +111,28 @@ export async function POST(req: Request) {
           direction: "OUTBOUND",
           provider: "whatsapp",
           providerMessageId: null,
-          fromPhone: "business",
+          fromPhone,
           toPhone,
           text,
           payload: { outboxId: outbox.id },
-
-          // ✅ palomitas: arranca en QUEUED
           status: "QUEUED",
         },
         select: { id: true },
       });
 
-      await tx.conversation.update({
-        where: { id: conversationId },
+      // ✅ evita cross-tenant update (usa updateMany)
+      await tx.conversation.updateMany({
+        where: { id: conversationId, businessId },
         data: { lastMessageAt: new Date() },
       });
 
       return { outbox, msg };
     });
 
-    // 3) Envío real a WhatsApp
     const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
 
     async function sendToWhatsApp(payload: any) {
-      const res = await fetch(url, {
+      const r = await fetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -136,20 +141,20 @@ export async function POST(req: Request) {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => ({}));
-      return { waRes: res, waData: data };
+      const data = await r.json().catch(() => ({}));
+      return { waRes: r, waData: data };
     }
 
     const payloadText = {
       messaging_product: "whatsapp",
-      to: toPhone,
+      to: waTo,
       type: "text",
       text: { body: text },
     };
 
     const payloadTemplate = {
       messaging_product: "whatsapp",
-      to: toPhone,
+      to: waTo,
       type: "template",
       template: {
         name: "jaspers_market_plain_text_v1",
@@ -159,10 +164,8 @@ export async function POST(req: Request) {
 
     let usedTemplate = false;
 
-    // 1) intenta mandar el texto real
     let { waRes, waData } = await sendToWhatsApp(payloadText);
 
-    // 2) si falla por ventana cerrada / requiere template, fallback
     if (!waRes.ok) {
       const msg = String(
         waData?.error?.message ?? waData?.error?.error_user_msg ?? ""
@@ -181,28 +184,20 @@ export async function POST(req: Request) {
     }
 
     if (!waRes.ok) {
-      console.error("WA_SEND_FAILED", {
-        status: waRes.status,
-        waData,
-        toPhone,
-        phoneNumberId,
-      });
-
       const errMsg =
         waData?.error?.message ??
         waData?.error?.error_user_msg ??
         `HTTP ${waRes.status}`;
 
       await prisma.$transaction(async (tx) => {
-        await tx.outboxMessage.update({
-          where: { id: result.outbox.id },
+        await tx.outboxMessage.updateMany({
+          where: { id: result.outbox.id, businessId },
           data: { status: "FAILED", lastError: errMsg },
         });
 
-        await tx.message.update({
-          where: { id: result.msg.id },
+        await tx.message.updateMany({
+          where: { id: result.msg.id, businessId },
           data: {
-            // ✅ palomitas: falla
             status: "FAILED",
             payload: {
               outboxId: result.outbox.id,
@@ -213,12 +208,12 @@ export async function POST(req: Request) {
               templateName: usedTemplate
                 ? "jaspers_market_plain_text_v1"
                 : null,
+              waTo,
             },
           },
         });
       });
 
-      // Mantienes status 200 para UX (como ya lo haces)
       return NextResponse.json(
         { ok: false, error: errMsg, meta: waData },
         { status: 200 }
@@ -229,25 +224,23 @@ export async function POST(req: Request) {
       waData?.messages?.[0]?.id ?? waData?.messages?.[0]?.message_id ?? null;
 
     await prisma.$transaction(async (tx) => {
-      await tx.outboxMessage.update({
-        where: { id: result.outbox.id },
+      await tx.outboxMessage.updateMany({
+        where: { id: result.outbox.id, businessId },
         data: { status: "SENT", lastError: null },
       });
 
-      await tx.message.update({
-        where: { id: result.msg.id },
+      await tx.message.updateMany({
+        where: { id: result.msg.id, businessId },
         data: {
           providerMessageId: wamid,
-
-          // ✅ palomitas: WA aceptó => SENT
           status: "SENT",
-
           payload: {
             outboxId: result.outbox.id,
             sendStatus: "SENT",
             sentAt: new Date().toISOString(),
             usedTemplate,
             templateName: usedTemplate ? "jaspers_market_plain_text_v1" : null,
+            waTo,
           },
         },
       });

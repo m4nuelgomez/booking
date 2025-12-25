@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { AppointmentCard } from "./AppointmentCard";
+
 type Msg = {
   id: string;
   direction: "INBOUND" | "OUTBOUND" | string;
@@ -13,7 +15,7 @@ type Msg = {
   status?: "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED" | string;
 };
 
-function isNearBottom(el: HTMLElement, thresholdPx = 20) {
+function isNearBottom(el: HTMLElement, thresholdPx = 140) {
   const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
   return distance < thresholdPx;
 }
@@ -53,11 +55,18 @@ function TickSvg({
   variant: "single" | "double" | "doubleBlue" | "failed";
 }) {
   if (variant === "failed") {
-    return <span className="text-red-300 font-extrabold">!</span>;
+    return (
+      <span
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-400/20 text-red-200 text-[11px] font-bold"
+        title="No enviado"
+      >
+        !
+      </span>
+    );
   }
 
   const color =
-    variant === "doubleBlue" ? "var(--wa-blue)" : "rgba(134,150,160,0.95)"; // #8696a0 WA grey
+    variant === "doubleBlue" ? "var(--wa-blue)" : "rgba(134,150,160,0.95)";
 
   return (
     <svg
@@ -99,9 +108,18 @@ function tickVariant(status: string | undefined) {
 export default function MessagesList({
   conversationId,
   initialMessages,
+  nextAppt,
 }: {
   conversationId: string;
   initialMessages: Msg[];
+  nextAppt: {
+    id: string;
+    startsAt: string | Date;
+    endsAt: string | Date | null;
+    service: string | null;
+    notes: string | null;
+    status: string;
+  } | null;
 }) {
   const router = useRouter();
 
@@ -121,6 +139,9 @@ export default function MessagesList({
 
   const lastIdRef = useRef<string | null>(initialMessages.at(-1)?.id ?? null);
   const sinceRef = useRef<string>(new Date().toISOString());
+
+  const pendingAutoScrollRef = useRef(false);
+  const lastLenRef = useRef(initialMessages.length);
 
   const inFlightRef = useRef(false);
   const lastRTTRef = useRef(0);
@@ -145,6 +166,11 @@ export default function MessagesList({
       if (!res.ok || !data?.ok) return;
 
       lastMarkedReadRef.current = messageId;
+
+      window.dispatchEvent(
+        new CustomEvent("booking:read", { detail: { conversationId } })
+      );
+
       router.refresh();
     } finally {
       markReadInFlightRef.current = false;
@@ -163,6 +189,10 @@ export default function MessagesList({
     lastMarkedReadRef.current = null;
     markReadInFlightRef.current = false;
 
+    window.dispatchEvent(
+      new CustomEvent("booking:read", { detail: { conversationId } })
+    );
+
     requestAnimationFrame(() => {
       scrollToBottom(wrapRef.current);
 
@@ -175,6 +205,10 @@ export default function MessagesList({
 
       markReadIfNeeded(lastIdRef.current);
     });
+
+    setTimeout(() => {
+      markReadIfNeeded(lastIdRef.current);
+    }, 250);
   }, [conversationId]);
 
   useEffect(() => {
@@ -208,6 +242,8 @@ export default function MessagesList({
   }
 
   async function fetchNew() {
+    if (!conversationId) return;
+
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
@@ -247,18 +283,17 @@ export default function MessagesList({
       setMessages((prev) => {
         const byId = new Map(prev.map((m) => [m.id, m] as const));
 
-        // aplica updates (status/palomitas)
+        // updates (status/palomitas)
         for (const u of updatesN) {
           const old = byId.get(u.id);
           byId.set(u.id, { ...(old ?? u), ...u });
         }
 
-        // agrega incoming nuevos
+        // incoming nuevos
         for (const m of incomingN) {
           if (!byId.has(m.id)) byId.set(m.id, m);
         }
 
-        // mantiene el orden actual + agrega nuevos al final
         const prevIds = new Set(prev.map((m) => m.id));
         const next = prev.map((m) => byId.get(m.id)!).filter(Boolean);
 
@@ -274,10 +309,13 @@ export default function MessagesList({
         return next;
       });
 
+      if (wasAtBottom && incomingN.length) {
+        pendingAutoScrollRef.current = true;
+      }
+
       if (data?.now) sinceRef.current = data.now;
 
       if (wasAtBottom) {
-        requestAnimationFrame(() => scrollToBottom(wrapRef.current, true));
         await markReadIfNeeded(lastIdRef.current);
         setNewMessagesCount(0);
       } else {
@@ -290,23 +328,35 @@ export default function MessagesList({
   }
 
   useEffect(() => {
-    let t: any;
+    let cancelled = false;
+    let t: any = null;
 
-    function schedule() {
-      const fast = isUserAtBottomRef.current;
-      const target = fast ? 450 : 1400;
-      const rtt = lastRTTRef.current || 0;
-
-      const wait = Math.max(80, target - rtt);
-
-      t = setTimeout(async () => {
-        await fetchNew();
-        schedule();
-      }, wait);
+    async function sleep(ms: number) {
+      await new Promise((res) => {
+        t = setTimeout(res, ms);
+      });
     }
 
-    schedule();
-    return () => clearTimeout(t);
+    async function loop() {
+      while (!cancelled) {
+        const fast = isUserAtBottomRef.current;
+        const target = fast ? 450 : 1400;
+        const rtt = lastRTTRef.current || 0;
+        const wait = Math.max(80, target - rtt);
+
+        await sleep(wait);
+        if (cancelled) break;
+
+        await fetchNew();
+      }
+    }
+
+    loop();
+
+    return () => {
+      cancelled = true;
+      if (t) clearTimeout(t);
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -316,14 +366,41 @@ export default function MessagesList({
       window.removeEventListener("booking:messageSent", handler as any);
   }, [conversationId]);
 
+  useEffect(() => {
+    if (messages.length <= lastLenRef.current) return;
+    lastLenRef.current = messages.length;
+
+    if (!pendingAutoScrollRef.current) return;
+    pendingAutoScrollRef.current = false;
+
+    // post-render (robusto)
+    requestAnimationFrame(() => {
+      scrollToBottom(wrapRef.current, false);
+      setTimeout(() => scrollToBottom(wrapRef.current, false), 0);
+      setTimeout(() => scrollToBottom(wrapRef.current, false), 50);
+    });
+  }, [messages.length]);
+
   return (
     <div className="relative h-full min-h-0">
       {/* Scroll area */}
       <div
         ref={wrapRef}
         className="chatScroll h-full overflow-y-auto px-4 py-3"
-        style={{ background: "var(--wa-panel)" }} // WA surface
+        style={{ background: "var(--wa-panel)" }}
       >
+        <div
+          className="sticky top-0 z-10 pt-2 pb-2"
+          style={{ background: "transparent" }}
+        >
+          <AppointmentCard
+            conversationId={conversationId}
+            nextAppt={nextAppt}
+          />
+        </div>
+
+        <div className="h-4" />
+
         <div className="space-y-2">
           {messages.map((m, idx) => {
             const outbound = m.direction === "OUTBOUND";
@@ -339,9 +416,39 @@ export default function MessagesList({
               : null;
             const showDayChip = day !== prevDay;
 
+            const text = (m.text ?? "").trim();
+            const hasText = text.length > 0;
+
+            // ✅ burbujas fantasma: si no hay contenido, no renders bubble
+            // pero dejamos pasar "template" y "failed" para mostrar avisos
+            if (!hasText && !usedTemplate && !failed) {
+              return (
+                <div key={m.id}>
+                  {showDayChip && (
+                    <div
+                      className="mx-auto my-2 w-fit rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/70 border border-white/10"
+                      suppressHydrationWarning
+                    >
+                      {mounted ? (
+                        formatDayChip(m.createdAt) === "Hoy" ? (
+                          <span className="font-semibold text-white/80">
+                            Hoy
+                          </span>
+                        ) : (
+                          formatDayChip(m.createdAt)
+                        )
+                      ) : (
+                        ""
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             const bubbleClass = outbound
               ? failed
-                ? "ml-auto bg-red-600 text-white"
+                ? "ml-auto bg-red-600/90 text-white"
                 : usedTemplate
                 ? "ml-auto bg-yellow-400 text-black"
                 : "ml-auto text-[#e9edef]"
@@ -350,8 +457,8 @@ export default function MessagesList({
             const bubbleStyle = outbound
               ? failed || usedTemplate
                 ? undefined
-                : { background: "var(--wa-out)" } // #005c4b
-              : { background: "var(--wa-in)" }; // #202c33
+                : { background: "var(--wa-out)" }
+              : { background: "var(--wa-in)" };
 
             return (
               <div key={m.id}>
@@ -373,12 +480,15 @@ export default function MessagesList({
                 )}
 
                 <div
-                  className={`max-w-[72%] rounded-xl px-3 py-2 text-[13px] leading-5 shadow-sm ${bubbleClass}`}
+                  className={`max-w-[72%] rounded-xl px-3 py-2 text-[13px] leading-5 shadow-sm wrap-break-word whitespace-pre-wrap ${bubbleClass}`}
                   style={bubbleStyle}
                 >
-                  <div className="whitespace-pre-wrap">{m.text ?? ""}</div>
+                  {/* Texto */}
+                  {hasText ? (
+                    <div className="whitespace-pre-wrap">{text}</div>
+                  ) : null}
 
-                  {/* footer WA: hora + ticks pegados */}
+                  {/* footer WA: hora + ticks */}
                   <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-white/60">
                     <span suppressHydrationWarning>
                       {mounted
@@ -403,16 +513,16 @@ export default function MessagesList({
                   </div>
 
                   {usedTemplate && !failed && (
-                    <div className="mt-1 text-[11px] opacity-80">
+                    <div className="mt-2 rounded-lg bg-black/10 px-2 py-1 text-[11px] opacity-90 wrap-break-word whitespace-pre-wrap">
                       Se envió plantilla para abrir conversación (no se envió tu
                       texto)
                     </div>
                   )}
 
                   {failed && (
-                    <div className="mt-1 text-[11px] opacity-80">
-                      No enviado:{" "}
-                      {String(m?.payload?.sendError ?? "").slice(0, 120)}
+                    <div className="mt-2 rounded-lg bg-black/20 px-2 py-1 text-[11px] text-white/85 wrap-break-word whitespace-pre-wrap">
+                      <span className="font-semibold">No enviado.</span>{" "}
+                      {String(m?.payload?.sendError ?? "Error al enviar.")}
                     </div>
                   )}
                 </div>
@@ -422,7 +532,7 @@ export default function MessagesList({
         </div>
       </div>
 
-      {/* Scroll to bottom button (WA style) */}
+      {/* Scroll to bottom button */}
       {newMessagesCount > 0 && !atBottom && (
         <button
           onClick={() => {

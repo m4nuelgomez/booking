@@ -32,6 +32,69 @@ enum MessageStatus {
   FAILED
 }
 
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELED
+  NO_SHOW
+}
+
+model Client {
+  id         String   @id @default(cuid())
+  businessId String
+  phone      String
+  name       String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business      Business       @relation(fields: [businessId], references: [id])
+  conversations Conversation[]
+  appointments  Appointment[]
+
+  @@unique([businessId, phone])
+  @@index([businessId, updatedAt])
+}
+
+model Appointment {
+  id             String  @id @default(cuid())
+  businessId     String
+  clientId       String?
+  conversationId String?
+
+  startsAt DateTime
+  endsAt   DateTime?
+  service  String?
+  notes    String?
+  status   AppointmentStatus @default(SCHEDULED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business     Business      @relation(fields: [businessId], references: [id])
+  client       Client?       @relation(fields: [clientId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@index([businessId, startsAt])
+  @@index([businessId, status, startsAt])
+  @@index([clientId, startsAt])
+}
+
+model WhatsAppAccount {
+  id            String   @id @default(cuid())
+  businessId    String
+  provider      String   @default("whatsapp")
+  phoneNumberId String   @unique
+  wabaId        String?
+  displayNumber String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
+}
+
 model Business {
   id        String   @id @default(cuid())
   name      String
@@ -43,6 +106,10 @@ model Business {
   messages      Message[]
   webhookEvents WebhookEvent[]
   outbox        OutboxMessage[]
+
+  clients      Client[]
+  appointments Appointment[]
+  waAccounts   WhatsAppAccount[]
 }
 
 model User {
@@ -75,22 +142,28 @@ model WebhookEvent {
 }
 
 model Conversation {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   businessId    String
   contactPhone  String
   lastMessageAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   lastReadMessageId String?
-  unreadCount       Int @default(0)
+  unreadCount       Int     @default(0)
 
-  business Business  @relation(fields: [businessId], references: [id])
-  messages Message[]
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+
+  business       Business        @relation(fields: [businessId], references: [id])
+  messages       Message[]
   outboxMessages OutboxMessage[]
+  appointments   Appointment[]
 
   @@unique([businessId, contactPhone])
   @@index([businessId, lastMessageAt])
+  @@index([businessId, unreadCount])
+  @@index([clientId])
 }
 
 model Message {
@@ -118,6 +191,7 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([businessId, createdAt])
   @@index([conversationId, updatedAt])
+  @@index([conversationId, status])
 }
 
 model OutboxMessage {

@@ -1,14 +1,50 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizePhone } from "@/lib/phone";
 
 export const runtime = "nodejs";
 
 const PROVIDER = "whatsapp";
 
-function getDefaultBusinessId() {
-  const id = process.env.DEFAULT_BUSINESS_ID;
-  if (!id) throw new Error("Missing env DEFAULT_BUSINESS_ID");
-  return id;
+async function resolveBusinessAndToPhone(payload: any) {
+  const entry = payload?.entry?.[0];
+  const change = entry?.changes?.[0];
+  const value = change?.value;
+
+  const phoneNumberId = value?.metadata?.phone_number_id
+    ? String(value.metadata.phone_number_id)
+    : null;
+
+  if (!phoneNumberId) {
+    throw new Error(
+      "Missing metadata.phone_number_id (cannot resolve business)"
+    );
+  }
+
+  const wa = await prisma.whatsAppAccount.findFirst({
+    where: { phoneNumberId },
+    select: { businessId: true, displayNumber: true, phoneNumberId: true },
+  });
+
+  if (!wa) {
+    throw new Error(
+      `WhatsAppAccount not found for phoneNumberId=${phoneNumberId}. Create mapping first.`
+    );
+  }
+
+  const display = value?.metadata?.display_phone_number
+    ? String(value.metadata.display_phone_number)
+    : wa.displayNumber
+    ? String(wa.displayNumber)
+    : "";
+
+  const toPhone = normalizePhone(display);
+
+  return {
+    businessId: wa.businessId,
+    phoneNumberId: wa.phoneNumberId,
+    toPhone,
+  };
 }
 
 function extractWhatsappMessage(payload: any) {
@@ -19,19 +55,19 @@ function extractWhatsappMessage(payload: any) {
   const message = value?.messages?.[0];
   if (!message) return null;
 
-  const fromPhone = message.from ?? "";
+  const fromPhone = normalizePhone(message.from ?? "");
   const providerMessageId = message.id ? String(message.id) : null;
 
   const text = message.type === "text" ? message.text?.body ?? "" : null;
 
-  const toPhone = value?.metadata?.display_phone_number
-    ? String(value.metadata.display_phone_number)
-    : "";
+  const phoneNumberId = value?.metadata?.phone_number_id
+    ? String(value.metadata.phone_number_id)
+    : null;
 
   return {
     eventType: change?.field ? String(change.field) : "messages",
     fromPhone,
-    toPhone,
+    phoneNumberId,
     providerMessageId,
     text,
     rawMessage: message,
@@ -122,9 +158,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const businessId = getDefaultBusinessId();
-
   let payload: any;
+
   try {
     const rawBody = await req.arrayBuffer();
     const jsonText = new TextDecoder("utf-8").decode(rawBody);
@@ -134,6 +169,25 @@ export async function POST(req: Request) {
       { ok: false, error: "Invalid JSON" },
       { status: 400 }
     );
+  }
+
+  // ✅ resolver tenant + toPhone con fallback a WhatsAppAccount.displayNumber
+  let businessId: string;
+  let toPhone: string;
+  let phoneNumberId: string;
+
+  try {
+    const resolved = await resolveBusinessAndToPhone(payload);
+    businessId = resolved.businessId;
+    toPhone = resolved.toPhone;
+    phoneNumberId = resolved.phoneNumberId;
+  } catch (e: any) {
+    console.error("[WA] BUSINESS_RESOLVE_FAILED", e?.message ?? e);
+    return NextResponse.json({
+      ok: true,
+      processed: false,
+      reason: e?.message ?? "Unknown phoneNumberId",
+    });
   }
 
   const raw = await prisma.webhookEvent.create({
@@ -154,9 +208,10 @@ export async function POST(req: Request) {
 
     console.log("[WA] extracted", {
       businessId,
+      phoneNumberId,
       eventType: extracted?.eventType,
       fromPhone: extracted?.fromPhone,
-      toPhone: extracted?.toPhone,
+      toPhone,
       providerMessageId: extracted?.providerMessageId,
       text: extracted?.text,
       hasStatuses: Array.isArray(
@@ -164,6 +219,7 @@ export async function POST(req: Request) {
       ),
     });
 
+    // Solo statuses (sin inbound message)
     if (!extracted) {
       await prisma.webhookEvent.update({
         where: { id: raw.id },
@@ -183,7 +239,7 @@ export async function POST(req: Request) {
 
     const contactPhone = extracted.fromPhone;
 
-    const conversation = await prisma.conversation.upsert({
+    let conversation = await prisma.conversation.upsert({
       where: {
         businessId_contactPhone: { businessId, contactPhone },
       },
@@ -195,14 +251,23 @@ export async function POST(req: Request) {
       update: {
         lastMessageAt: new Date(),
       },
-      select: { id: true },
+      select: { id: true, clientId: true },
     });
 
-    console.log("[WA] conversation upserted", {
-      businessId,
-      contactPhone,
-      conversationId: conversation.id,
-    });
+    if (!conversation.clientId) {
+      const existingClient = await prisma.client.findFirst({
+        where: { businessId, phone: contactPhone },
+        select: { id: true },
+      });
+
+      if (existingClient) {
+        conversation = await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { clientId: existingClient.id },
+          select: { id: true, clientId: true },
+        });
+      }
+    }
 
     let createdMessageId: string | null = null;
     let duplicate = false;
@@ -216,46 +281,27 @@ export async function POST(req: Request) {
           provider: PROVIDER,
           providerMessageId: extracted.providerMessageId,
           fromPhone: extracted.fromPhone,
-          toPhone: extracted.toPhone,
+          toPhone, // ✅ correcto
           text: extracted.text,
           payload: extracted.rawMessage,
-          status: "SENT",
+          status: "DELIVERED",
         },
         select: { id: true },
       });
 
       createdMessageId = created.id;
     } catch (err: any) {
-      if (err?.code === "P2002") {
-        duplicate = true;
-      } else {
-        throw err;
-      }
+      if (err?.code === "P2002") duplicate = true;
+      else throw err;
     }
 
-    console.log("[WA] message write", {
-      businessId,
-      conversationId: conversation.id,
-      providerMessageId: extracted.providerMessageId,
-      createdMessageId,
-      duplicate,
-    });
-
     if (!duplicate) {
-      const updatedConversation = await prisma.conversation.update({
-        where: { id: conversation.id },
+      await prisma.conversation.updateMany({
+        where: { id: conversation.id, businessId },
         data: {
           unreadCount: { increment: 1 },
           lastMessageAt: new Date(),
         },
-        select: {
-          unreadCount: true,
-        },
-      });
-
-      console.log("[WA] unreadCount++", {
-        conversationId: conversation.id,
-        unreadCount: updatedConversation.unreadCount,
       });
     }
 
@@ -264,7 +310,12 @@ export async function POST(req: Request) {
       data: { status: "PROCESSED", processedAt: new Date() },
     });
 
-    console.log("[WA] processed", { rawEventId: raw.id, statusesProcessed });
+    console.log("[WA] processed", {
+      rawEventId: raw.id,
+      statusesProcessed,
+      createdMessageId,
+      duplicate,
+    });
 
     return NextResponse.json({
       ok: true,

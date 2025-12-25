@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginForm() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const next = sp.get("next") || "/inbox";
+
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,11 +25,12 @@ export default function LoginForm() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok)
+      if (!res.ok || !data?.ok) {
         throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
 
-      // manda al inbox
-      window.location.href = "/inbox";
+      router.replace(next.startsWith("/") ? next : "/inbox");
+      router.refresh();
     } catch (err: any) {
       setError(err?.message ?? "Login failed");
       setLoading(false);

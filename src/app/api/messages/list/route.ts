@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
-const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? "dev-business";
 const TAKE = 50;
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = requireBusinessIdFromReq(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { ok: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const businessId = auth.businessId;
+
     const { searchParams } = new URL(req.url);
 
     const conversationId = searchParams.get("conversationId");
@@ -16,18 +25,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { ok: false, error: "conversationId is required" },
         { status: 400 }
-      );
-    }
-
-    const convo = await prisma.conversation.findFirst({
-      where: { id: conversationId, businessId: DEFAULT_BUSINESS_ID },
-      select: { id: true },
-    });
-
-    if (!convo) {
-      return NextResponse.json(
-        { ok: false, error: "Conversation not found" },
-        { status: 404 }
       );
     }
 
@@ -46,12 +43,39 @@ export async function GET(req: NextRequest) {
       status: true,
       deliveredAt: true,
       readAt: true,
+      updatedAt: true,
     } as const;
 
+    // DTO fechas
+    const toDTO = (m: any) => ({
+      ...m,
+      createdAt: m.createdAt.toISOString(),
+      updatedAt: m.updatedAt.toISOString(),
+      deliveredAt: m.deliveredAt ? m.deliveredAt.toISOString() : null,
+      readAt: m.readAt ? m.readAt.toISOString() : null,
+    });
+
+    // ✅ valida tenant
+    const convo = await prisma.conversation.findFirst({
+      where: { id: conversationId, businessId },
+      select: { id: true },
+    });
+
+    // ✅ para polling: si no existe/no pertenece, responde vacío (NO 404)
+    if (!convo) {
+      return NextResponse.json({
+        ok: true,
+        messages: [],
+        updates: [],
+        now: now.toISOString(),
+      });
+    }
+
+    // ✅ updates solo outbound y por tenant
     const updates = sinceOk
       ? await prisma.message.findMany({
           where: {
-            businessId: DEFAULT_BUSINESS_ID,
+            businessId,
             conversationId,
             direction: "OUTBOUND",
             updatedAt: { gt: sinceDate! },
@@ -66,21 +90,24 @@ export async function GET(req: NextRequest) {
 
     if (after) {
       const cursorMsg = await prisma.message.findFirst({
-        where: { id: after, conversationId, businessId: DEFAULT_BUSINESS_ID },
+        where: { id: after, conversationId, businessId },
         select: { id: true, createdAt: true },
       });
 
+      // ✅ cursor inválido: no romper polling (NO 400)
       if (!cursorMsg) {
-        return NextResponse.json(
-          { ok: false, error: "Invalid cursor (after)" },
-          { status: 400 }
-        );
+        return NextResponse.json({
+          ok: true,
+          messages: [],
+          updates: updates.map(toDTO),
+          now: now.toISOString(),
+        });
       }
 
       messages = await prisma.message.findMany({
         where: {
+          businessId,
           conversationId,
-          businessId: DEFAULT_BUSINESS_ID,
           OR: [
             { createdAt: { gt: cursorMsg.createdAt } },
             {
@@ -97,7 +124,7 @@ export async function GET(req: NextRequest) {
       });
     } else {
       const latest = await prisma.message.findMany({
-        where: { conversationId, businessId: DEFAULT_BUSINESS_ID },
+        where: { businessId, conversationId },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: TAKE,
         select,
@@ -108,8 +135,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      messages,
-      updates,
+      messages: messages.map(toDTO),
+      updates: updates.map(toDTO),
       now: now.toISOString(),
     });
   } catch (err: any) {

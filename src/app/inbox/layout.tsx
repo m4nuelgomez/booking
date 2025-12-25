@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import Sidebar from "./Sidebar";
 import { headers } from "next/headers";
-import LogoutButton from "./LogoutButton";
+import { requireBusinessId } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export default async function InboxLayout({
   children,
@@ -13,7 +15,7 @@ export default async function InboxLayout({
   const match = url.match(/\/inbox\/([^/?#]+)/);
   const activeId = match?.[1] ?? null;
 
-  const businessId = process.env.DEFAULT_BUSINESS_ID ?? "dev-business";
+  const businessId = await requireBusinessId();
 
   const conversations = await prisma.conversation.findMany({
     where: { businessId },
@@ -25,6 +27,11 @@ export default async function InboxLayout({
       lastMessageAt: true,
       createdAt: true,
       unreadCount: true,
+      client: {
+        select: {
+          name: true,
+        },
+      },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -41,9 +48,12 @@ export default async function InboxLayout({
     const last = c.messages[0] ?? null;
     const lastAt = c.lastMessageAt ?? last?.createdAt ?? c.createdAt;
 
+    const displayName = c.client?.name?.trim() || c.contactPhone;
+
     return {
       id: c.id,
       contactPhone: c.contactPhone,
+      displayName,
       lastAt: lastAt.toISOString(),
       lastText: (last?.text ?? "").trim(),
       lastDirection: last?.direction ?? null,
@@ -57,13 +67,10 @@ export default async function InboxLayout({
         <div className="h-full max-w-375 mx-auto px-4 py-4">
           <div className="h-full grid grid-cols-[380px_1fr] gap-4">
             <aside className="wa-panel overflow-hidden flex flex-col">
-              {/* ✅ Header del sidebar */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                 <div className="text-sm font-semibold text-white">Booking</div>
-                <LogoutButton />
               </div>
 
-              {/* ✅ Sidebar ocupa el resto */}
               <div className="min-h-0 flex-1">
                 <Sidebar items={items} activeId={activeId} />
               </div>

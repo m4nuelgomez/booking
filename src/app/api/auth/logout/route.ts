@@ -1,19 +1,17 @@
 import { NextResponse } from "next/server";
 
-const COOKIE_NAME = "booking_gate";
-
 export async function POST() {
   const res = NextResponse.json({ ok: true });
 
-  res.cookies.delete(COOKIE_NAME);
-
-  res.cookies.set({
-    name: COOKIE_NAME,
-    value: "",
-    path: "/",
+  res.cookies.set("booking_gate", "", {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    expires: new Date(0),
+  });
+
+  res.cookies.set("booking_bid", "", {
+    httpOnly: true,
+    path: "/",
     expires: new Date(0),
   });
 

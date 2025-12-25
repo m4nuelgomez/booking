@@ -1,15 +1,24 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
 export const runtime = "nodejs";
 
-const BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? "dev-business";
-
 export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  req: NextRequest,
+  { params }: { params: { id: string } }
 ) {
-  const { id } = await params;
+  const { id } = params;
+
+  const auth = requireBusinessIdFromReq(req);
+  if (!auth.ok) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status }
+    );
+  }
+  const businessId = auth.businessId;
+
   const body = await req.json().catch(() => ({}));
   const lastMessageId = body?.lastMessageId ? String(body.lastMessageId) : "";
 
@@ -20,9 +29,8 @@ export async function POST(
     );
   }
 
-  // valida que el mensaje existe y pertenece a esa conversación y negocio
   const msg = await prisma.message.findFirst({
-    where: { id: lastMessageId, conversationId: id, businessId: BUSINESS_ID },
+    where: { id: lastMessageId, conversationId: id, businessId },
     select: { id: true },
   });
 
@@ -33,12 +41,9 @@ export async function POST(
     );
   }
 
-  await prisma.conversation.update({
-    where: { id },
-    data: {
-      lastReadMessageId: lastMessageId,
-      unreadCount: 0,
-    },
+  await prisma.conversation.updateMany({
+    where: { id, businessId },
+    data: { lastReadMessageId: lastMessageId, unreadCount: 0 },
   });
 
   return NextResponse.json({ ok: true });

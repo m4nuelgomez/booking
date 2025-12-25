@@ -7,7 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 type SidebarItem = {
   id: string;
   contactPhone: string;
-  lastAt: string; // ISO string
+  displayName: string;
+  lastAt: string;
   lastText: string;
   lastDirection: "INBOUND" | "OUTBOUND" | null | string;
   unreadCount: number;
@@ -101,15 +102,46 @@ export default function Sidebar({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const [unreadOverride, setUnreadOverride] = useState<Record<string, number>>(
+    {}
+  );
+
+  useEffect(() => {
+    setUnreadOverride((prev) => {
+      const next = { ...prev };
+      for (const it of items) {
+        if (next[it.id] == null) next[it.id] = it.unreadCount ?? 0;
+      }
+      return next;
+    });
+  }, [items]);
+
   useEffect(() => {
     if (!pathname?.startsWith("/inbox")) return;
 
-    const t = setInterval(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
       router.refresh();
-    }, 1500);
+    };
 
+    const t = setInterval(tick, 3500);
     return () => clearInterval(t);
   }, [router, pathname]);
+
+  useEffect(() => {
+    const handler = (ev: any) => {
+      console.log("SIDEBAR booking:read", ev?.detail);
+      const id = ev?.detail?.conversationId;
+      if (!id) return;
+
+      setUnreadOverride((prev) => ({ ...prev, [id]: 0 }));
+
+      if (document.visibilityState === "visible") router.refresh();
+    };
+
+    window.addEventListener("booking:read", handler as any);
+    return () => window.removeEventListener("booking:read", handler as any);
+  }, [router]);
 
   useEffect(() => {
     if (!effectiveActiveId) return;
@@ -123,9 +155,10 @@ export default function Sidebar({
     const s = q.trim().toLowerCase();
     if (!s) return items;
     return items.filter((c) => {
-      const a = c.contactPhone.toLowerCase();
-      const b = (c.lastText ?? "").toLowerCase();
-      return a.includes(s) || b.includes(s);
+      const a = (c.displayName ?? "").toLowerCase();
+      const b = c.contactPhone.toLowerCase();
+      const d = (c.lastText ?? "").toLowerCase();
+      return a.includes(s) || b.includes(s) || d.includes(s);
     });
   }, [items, q]);
 
@@ -193,7 +226,9 @@ export default function Sidebar({
                   ? ""
                   : "";
 
-              const showUnread = (c.unreadCount ?? 0) > 0;
+              const effectiveUnread =
+                unreadOverride[c.id] ?? c.unreadCount ?? 0;
+              const showUnread = effectiveUnread > 0;
 
               return (
                 <li key={c.id} id={`convo-${c.id}`}>
@@ -210,14 +245,16 @@ export default function Sidebar({
                     <div className="flex gap-3 items-center">
                       {/* Avatar */}
                       <div className="w-12 h-12 rounded-full bg-white/10 border border-white/10 grid place-items-center font-black text-sm flex-none">
-                        {c.contactPhone.slice(-2)}
+                        {(
+                          c.displayName?.trim()?.[0] ?? c.contactPhone.slice(-2)
+                        ).toUpperCase()}
                       </div>
 
                       <div className="min-w-0 flex-1">
                         {/* Row 1: name + time */}
                         <div className="flex items-center gap-2">
                           <div className="font-semibold text-[15px] truncate">
-                            {c.contactPhone}
+                            {c.displayName || c.contactPhone}
                           </div>
 
                           <div className="ml-auto flex items-center gap-2 flex-none">
@@ -247,10 +284,10 @@ export default function Sidebar({
                           {showUnread && (
                             <div
                               className="min-w-5 h-5 px-1.75 rounded-full bg-[#00a884] text-[#111b21] text-[12px] font-extrabold grid place-items-center flex-none"
-                              aria-label={`Unread ${c.unreadCount}`}
-                              title={`${c.unreadCount} unread`}
+                              aria-label={`Unread ${effectiveUnread}`}
+                              title={`${effectiveUnread} unread`}
                             >
-                              {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                              {effectiveUnread > 99 ? "99+" : effectiveUnread}
                             </div>
                           )}
                         </div>

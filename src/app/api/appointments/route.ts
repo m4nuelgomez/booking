@@ -1,34 +1,51 @@
+// src/app/api/appointments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
+import { fromZonedTime } from "date-fns-tz";
+import { addMinutes } from "date-fns";
+import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
-const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? "dev-business";
+export const runtime = "nodejs";
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+const TZ = "America/Mexico_City";
+
+function dayRangeUtc(dateStr?: string | null) {
+  const d = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null;
+  const localDay = d ?? new Date().toISOString().slice(0, 10);
+
+  const startLocal = new Date(`${localDay}T00:00:00`);
+  const endLocal = new Date(`${localDay}T00:00:00`);
+  endLocal.setDate(endLocal.getDate() + 1);
+
+  const start = fromZonedTime(startLocal, TZ);
+  const end = fromZonedTime(endLocal, TZ);
+
+  return { start, end };
 }
-function endOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
+
+function localDateTimeToUtc(dateStr: string, timeStr: string) {
+  const local = new Date(`${dateStr}T${timeStr}:00`);
+  return fromZonedTime(local, TZ);
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-    const dateStr = url.searchParams.get("date"); // YYYY-MM-DD
-    const date = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
+    const auth = requireBusinessIdFromReq(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { ok: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const businessId = auth.businessId;
 
-    const from = startOfDay(date);
-    const to = endOfDay(date);
+    const url = new URL(req.url);
+    const dateStr = url.searchParams.get("date");
+    const { start, end } = dayRangeUtc(dateStr);
 
     const items = await prisma.appointment.findMany({
-      where: {
-        businessId: DEFAULT_BUSINESS_ID,
-        startsAt: { gte: from, lte: to },
-      },
+      where: { businessId, startsAt: { gte: start, lt: end } },
       orderBy: { startsAt: "asc" },
       select: {
         id: true,
@@ -53,14 +70,23 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const auth = requireBusinessIdFromReq(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { ok: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const businessId = auth.businessId;
+
+    const body = await req.json().catch(() => ({}));
 
     const phoneRaw = String(body.phone ?? "").trim();
-    const phone = normalizePhone(phoneRaw);
+    const phone = normalizePhone(phoneRaw); // <- YA QUEDA 521...
     const name = body.name ? String(body.name).trim() : null;
 
-    const dateStr = String(body.date ?? "").trim(); // YYYY-MM-DD
-    const timeStr = String(body.time ?? "").trim(); // HH:MM
+    const dateStr = String(body.date ?? "").trim();
+    const timeStr = String(body.time ?? "").trim();
     const durationMin = Number(body.durationMin ?? 60);
 
     const service = body.service ? String(body.service).trim() : null;
@@ -89,26 +115,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const startsAt = new Date(`${dateStr}T${timeStr}:00`);
-    const endsAt = new Date(startsAt.getTime() + durationMin * 60 * 1000);
+    const startsAt = localDateTimeToUtc(dateStr, timeStr);
+    const endsAt = addMinutes(startsAt, durationMin);
 
     const client = await prisma.client.upsert({
-      where: { businessId_phone: { businessId: DEFAULT_BUSINESS_ID, phone } },
-      create: {
-        businessId: DEFAULT_BUSINESS_ID,
-        phone,
-        name: name ?? undefined,
-      },
+      where: { businessId_phone: { businessId, phone } },
+      create: { businessId, phone, name: name ?? undefined },
       update: { name: name ?? undefined },
       select: { id: true, phone: true, name: true },
     });
 
-    // Link to conversation if exists
     const convo = await prisma.conversation.findUnique({
       where: {
         businessId_contactPhone: {
-          businessId: DEFAULT_BUSINESS_ID,
-          contactPhone: phone,
+          businessId,
+          contactPhone: phone, // <- MISMO NORMALIZADO
         },
       },
       select: { id: true, clientId: true },
@@ -123,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     const appt = await prisma.appointment.create({
       data: {
-        businessId: DEFAULT_BUSINESS_ID,
+        businessId,
         clientId: client.id,
         conversationId: convo?.id ?? null,
         startsAt,

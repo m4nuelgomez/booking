@@ -1,9 +1,37 @@
+// src/lib/phone.ts
 export function normalizePhone(input: string) {
-  let s = input.replace(/\s+/g, "").replace(/-/g, "").replace(/^\+/, "");
+  if (!input) return "";
 
-  if (s.startsWith("52") && s.length === 12) {
-    s = "521" + s.slice(2);
+  const raw = String(input).trim();
+  const digits = raw.replace(/[^\d]/g, "");
+
+  // 521 + 10 dígitos (WA)
+  if (digits.startsWith("521") && digits.length >= 13) {
+    return "+52" + digits.slice(3, 13);
   }
 
-  return s;
+  // 52 + 10 dígitos
+  if (digits.startsWith("52") && digits.length >= 12) {
+    return "+52" + digits.slice(2, 12);
+  }
+
+  // 10 dígitos
+  if (digits.length === 10) {
+    return "+52" + digits;
+  }
+
+  // ya viene con +
+  if (raw.startsWith("+") && digits.length >= 11) {
+    return "+" + digits;
+  }
+
+  return "";
+}
+
+export function formatPhoneForDisplay(normalized: string) {
+  const s = String(normalized ?? "").trim();
+  if (!s) return "";
+  if (s.startsWith("+")) return s;
+  const digits = s.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : "";
 }

@@ -27,6 +27,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  await prisma.business.upsert({
+    where: { id: businessId },
+    create: { id: businessId, name: "Booking" },
+    update: {},
+  });
+
+  const existing = await prisma.whatsAppAccount.findUnique({
+    where: { phoneNumberId },
+    select: { id: true, businessId: true },
+  });
+
+  if (existing && existing.businessId !== businessId) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Este phoneNumberId ya está vinculado a otro negocio. Desvincúlalo primero o usa otro.",
+      },
+      { status: 409 }
+    );
+  }
+
   const account = await prisma.whatsAppAccount.upsert({
     where: { phoneNumberId },
     create: {

@@ -1,13 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
+import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
 export const runtime = "nodejs";
 
-const DEFAULT_BUSINESS_ID = process.env.DEFAULT_BUSINESS_ID ?? "dev-business";
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const auth = requireBusinessIdFromReq(req);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { ok: false, error: auth.error },
+        { status: auth.status }
+      );
+    }
+    const businessId = auth.businessId;
+
     const body = await req.json().catch(() => ({}));
     const appointmentId = String(body?.appointmentId ?? "").trim();
 
@@ -19,7 +27,7 @@ export async function POST(req: Request) {
     }
 
     const appt = await prisma.appointment.findFirst({
-      where: { id: appointmentId, businessId: DEFAULT_BUSINESS_ID },
+      where: { id: appointmentId, businessId },
       select: {
         id: true,
         conversationId: true,
@@ -52,32 +60,39 @@ export async function POST(req: Request) {
       );
     }
 
-    const convo = await prisma.conversation.upsert({
+    // tolerancia a conversaciones viejas con +521...
+    const alt521 = contactPhone.startsWith("+52")
+      ? `+521${contactPhone.slice(3)}`
+      : null;
+
+    const existing = await prisma.conversation.findFirst({
       where: {
-        businessId_contactPhone: {
-          businessId: DEFAULT_BUSINESS_ID,
-          contactPhone,
-        },
-      },
-      create: {
-        businessId: DEFAULT_BUSINESS_ID,
-        contactPhone,
-        clientId,
-        lastMessageAt: new Date(),
-      },
-      update: {
-        lastMessageAt: new Date(),
-        clientId: clientId,
+        businessId,
+        OR: [{ contactPhone }, ...(alt521 ? [{ contactPhone: alt521 }] : [])],
       },
       select: { id: true },
     });
 
+    const convoId = existing
+      ? existing.id
+      : (
+          await prisma.conversation.create({
+            data: {
+              businessId,
+              contactPhone,
+              clientId,
+              lastMessageAt: new Date(),
+            },
+            select: { id: true },
+          })
+        ).id;
+
     await prisma.appointment.update({
       where: { id: appt.id },
-      data: { conversationId: convo.id },
+      data: { conversationId: convoId },
     });
 
-    return NextResponse.json({ ok: true, conversationId: convo.id });
+    return NextResponse.json({ ok: true, conversationId: convoId });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "Unknown error" },

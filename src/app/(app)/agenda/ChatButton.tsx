@@ -12,8 +12,11 @@ export function ChatButton({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function onOpen() {
+    setError(null);
+
     if (existingConversationId) {
       router.push(`/inbox/${existingConversationId}`);
       return;
@@ -34,20 +37,28 @@ export function ChatButton({
 
       router.push(`/inbox/${data.conversationId}`);
     } catch (e: any) {
-      alert(e?.message ?? "Failed to open chat");
+      setError(e?.message ?? "No se pudo abrir el chat");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <button
-      onClick={onOpen}
-      disabled={loading}
-      className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50"
-      title="Abrir chat"
-    >
-      {loading ? "Abriendo..." : "Chat"}
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onOpen}
+        disabled={loading}
+        className="min-w-[86px] rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-900 disabled:opacity-50"
+        title="Abrir chat"
+      >
+        {loading ? "Abriendo…" : "Chat"}
+      </button>
+
+      {error ? (
+        <span className="text-xs text-red-300" title={error}>
+          Error
+        </span>
+      ) : null}
+    </div>
   );
 }

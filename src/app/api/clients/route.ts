@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireBusinessIdFromReq } from "@/lib/auth-api";
 import { Prisma } from "@prisma/client";
+import { normalizePhone } from "@/lib/phone";
 
 const TAKE = 50;
 
@@ -51,15 +52,6 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function normalizeMXPhone(input: string) {
-  const digits = input.replace(/\D/g, "");
-
-  if (digits.length === 10) return `+52${digits}`;
-  if (digits.startsWith("52") && digits.length === 12) return `+${digits}`;
-
-  throw new Error("Número de teléfono inválido");
-}
-
 export async function POST(req: NextRequest) {
   let phone = "";
   let businessId: string | null = null;
@@ -88,42 +80,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    try {
-      phone = normalizeMXPhone(rawPhoneStr);
-    } catch {
+    phone = normalizePhone(rawPhoneStr);
+    if (!phone) {
       return NextResponse.json(
         { ok: false, error: "Número de teléfono inválido" },
         { status: 400 }
       );
     }
 
-    const client = await prisma.client.create({
-      data: { businessId, phone, name },
+    // ✅ Recomendado: upsert para evitar duplicados incluso con carreras simultáneas
+    const client = await prisma.client.upsert({
+      where: { businessId_phone: { businessId, phone } },
+      update: {
+        ...(name ? { name } : {}),
+      },
+      create: { businessId, phone, name },
       select: { id: true, name: true, phone: true },
     });
 
     return NextResponse.json({ ok: true, client });
   } catch (e: unknown) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      if (e.code === "P2002") {
-        const existing =
-          businessId && phone
-            ? await prisma.client.findFirst({
-                where: { businessId, phone },
-                select: { id: true, name: true, phone: true },
-              })
-            : null;
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
+      // debería ser raro si usas upsert, pero por seguridad:
+      const existing =
+        businessId && phone
+          ? await prisma.client.findFirst({
+              where: { businessId, phone },
+              select: { id: true, name: true, phone: true },
+            })
+          : null;
 
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "CLIENT_EXISTS",
-            message: "Ya existe un cliente con ese teléfono",
-            existingClient: existing,
-          },
-          { status: 409 }
-        );
-      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "CLIENT_EXISTS",
+          message: "Ya existe un cliente con ese teléfono",
+          existingClient: existing,
+        },
+        { status: 409 }
+      );
     }
 
     const msg = (e as any)?.message ?? "Unknown error";

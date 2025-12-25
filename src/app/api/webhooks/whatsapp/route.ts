@@ -38,7 +38,7 @@ async function resolveBusinessAndToPhone(payload: any) {
     ? String(wa.displayNumber)
     : "";
 
-  const toPhone = normalizePhone(display);
+  const toPhone = normalizePhone(display) || display;
 
   return {
     businessId: wa.businessId,

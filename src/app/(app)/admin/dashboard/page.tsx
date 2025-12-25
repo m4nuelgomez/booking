@@ -137,7 +137,7 @@ export default async function AdminDashboardPage() {
 
   /* -------- Rows (100% typed) -------- */
 
-  const rows: Row[] = topBusinesses.map((b: any) => {
+  const rows: Row[] = topBusinesses.map((b: BusinessRow) => {
     const msgs = b._count.messages;
     const clients = b._count.clients;
     const outbox = b._count.outbox;

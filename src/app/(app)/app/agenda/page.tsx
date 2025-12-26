@@ -1,8 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppointmentCard } from "./AppointmentCard";
+import { CalendarX } from "lucide-react";
+import {
+  Phone,
+  User,
+  Calendar,
+  Clock,
+  Timer,
+  Scissors,
+  FileText,
+} from "lucide-react";
 
 type Item = {
   id: string;
@@ -110,6 +119,12 @@ export default function AgendaPage() {
   useEffect(() => {
     load();
   }, [date, showCanceled]);
+
+  useEffect(() => {
+    if (!editing) {
+      setFormDate(date);
+    }
+  }, [date, editing]);
 
   const title = useMemo(() => formatShortEs(date), [date]);
 
@@ -304,15 +319,7 @@ export default function AgendaPage() {
           </div>
 
           {/* Actions Row */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <Link
-              href="/app/dashboard"
-              className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900"
-            >
-              <span aria-hidden>←</span>
-              Dashboard
-            </Link>
-
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setDate(prevDate)}
@@ -335,7 +342,7 @@ export default function AgendaPage() {
                 title="Ir a hoy"
                 disabled={loading}
               >
-                {centerLabel}
+                Hoy
               </button>
 
               <button
@@ -377,7 +384,7 @@ export default function AgendaPage() {
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
           <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 text-sm text-zinc-300">
-            <div>{loading ? "Cargando..." : `${items.length} cita(s)`}</div>
+            <div>{loading ? "Cargando..." : `${items.length} citas`}</div>
             <div className="text-zinc-500">
               {loading ? "" : "Todas las horas en tu zona"}
             </div>
@@ -385,7 +392,10 @@ export default function AgendaPage() {
 
           {items.length === 0 && !loading ? (
             <div className="px-4 py-10 text-center">
-              <div className="text-2xl">📭</div>
+              <div className="flex justify-center text-zinc-500/70">
+                <CalendarX size={44} strokeWidth={1.25} />
+              </div>
+
               <div className="mt-2 text-sm font-medium text-zinc-200">
                 No tienes citas para este día
               </div>
@@ -427,21 +437,35 @@ export default function AgendaPage() {
                       <label className="text-xs text-zinc-400">
                         Teléfono *
                       </label>
-                      <input
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+52..."
-                        className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
-                      />
+                      <div className="relative mt-1">
+                        <Phone
+                          size={16}
+                          strokeWidth={1.75}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                        />
+                        <input
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+52..."
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="text-xs text-zinc-400">Nombre</label>
-                      <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Opcional"
-                        className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
-                      />
+                      <div className="relative mt-1">
+                        <User
+                          size={16}
+                          strokeWidth={1.75}
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                        />
+                        <input
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Opcional"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200"
+                        />
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -459,23 +483,37 @@ export default function AgendaPage() {
                   {/* FECHA → formDate */}
                   <div>
                     <label className="text-xs text-zinc-400">Fecha</label>
-                    <input
-                      type="date"
-                      value={formDate}
-                      onChange={(e) => setFormDate(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 [color-scheme:dark]"
-                    />
+                    <div className="relative mt-1">
+                      <Calendar
+                        size={16}
+                        strokeWidth={1.75}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+                      />
+                      <input
+                        type="date"
+                        value={formDate}
+                        onChange={(e) => setFormDate(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200 [color-scheme:dark]"
+                      />
+                    </div>
                   </div>
 
                   {/* HORA → time */}
                   <div>
                     <label className="text-xs text-zinc-400">Hora *</label>
-                    <input
-                      type="time"
-                      value={time}
-                      onChange={(e) => setTime(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 [color-scheme:dark]"
-                    />
+                    <div className="relative mt-1">
+                      <Clock
+                        size={16}
+                        strokeWidth={1.75}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+                      />
+                      <input
+                        type="time"
+                        value={time}
+                        onChange={(e) => setTime(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200 [color-scheme:dark]"
+                      />
+                    </div>
                   </div>
 
                   {/* DURACIÓN */}
@@ -483,35 +521,56 @@ export default function AgendaPage() {
                     <label className="text-xs text-zinc-400">
                       Duración (min)
                     </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={durationMin}
-                      onChange={(e) => setDurationMin(Number(e.target.value))}
-                      className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
-                    />
+                    <div className="relative mt-1">
+                      <Timer
+                        size={16}
+                        strokeWidth={1.75}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        value={durationMin}
+                        onChange={(e) => setDurationMin(Number(e.target.value))}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div>
                   <label className="text-xs text-zinc-400">Servicio</label>
-                  <input
-                    value={service}
-                    onChange={(e) => setService(e.target.value)}
-                    placeholder="Corte, barba, tinte..."
-                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
-                  />
+                  <div className="relative mt-1">
+                    <Scissors
+                      size={16}
+                      strokeWidth={1.75}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+                    />
+                    <input
+                      value={service}
+                      onChange={(e) => setService(e.target.value)}
+                      placeholder="Corte, barba, tinte..."
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200"
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="text-xs text-zinc-400">Notas</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={3}
-                    placeholder="Detalles extra"
-                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"
-                  />
+                  <div className="relative mt-1">
+                    <FileText
+                      size={16}
+                      strokeWidth={1.75}
+                      className="absolute left-3 top-3 text-zinc-500"
+                    />
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={3}
+                      placeholder="Detalles extra"
+                      className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 pl-9 text-sm text-zinc-200"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-2 flex justify-end gap-2">

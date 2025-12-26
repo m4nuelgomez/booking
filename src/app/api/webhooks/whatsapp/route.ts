@@ -1,6 +1,7 @@
+// src/app/api/webhooks/whatsapp/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhoneLoose, phoneCandidates } from "@/lib/phone";
 
 export const runtime = "nodejs";
 
@@ -48,7 +49,13 @@ async function resolveBusinessAndToPhone(payload: any) {
     ? String(wa.displayNumber)
     : "";
 
-  const toPhone = normalizePhone(display) || display;
+  const toPhone = normalizePhoneLoose(display);
+
+  if (!toPhone) {
+    throw new Error(
+      `Cannot normalize toPhone from metadata display_phone_number="${display}"`
+    );
+  }
 
   return {
     businessId: wa.businessId,
@@ -65,22 +72,29 @@ function extractWhatsappMessage(payload: any) {
   const message = value?.messages?.[0];
   if (!message) return null;
 
-  const fromPhone = normalizePhone(message.from ?? "");
-  const providerMessageId = message.id ? String(message.id) : null;
-
-  const text = message.type === "text" ? message.text?.body ?? "" : null;
-
   const phoneNumberId = value?.metadata?.phone_number_id
     ? String(value.metadata.phone_number_id)
     : null;
 
+  const fromRaw = String(message.from ?? "");
+  const fromPhone = normalizePhoneLoose(fromRaw);
+
+  const providerMessageId = message.id ? String(message.id) : null;
+  const text = message.type === "text" ? message.text?.body ?? "" : null;
+
+  const contactName = value?.contacts?.[0]?.profile?.name
+    ? String(value.contacts[0].profile.name)
+    : null;
+
   return {
     eventType: change?.field ? String(change.field) : "messages",
-    fromPhone,
     phoneNumberId,
+    fromRaw,
+    fromPhone,
     providerMessageId,
     text,
     rawMessage: message,
+    contactName,
   };
 }
 
@@ -157,14 +171,14 @@ export async function GET(req: Request) {
   const expected = process.env.WHATSAPP_VERIFY_TOKEN;
 
   if (!expected) {
-    return new NextResponse("Missing WHATSAPP_VERIFY_TOKEN", { status: 500 });
+    return new Response("Missing WHATSAPP_VERIFY_TOKEN", { status: 500 });
   }
 
   if (mode === "subscribe" && token === expected && challenge) {
-    return new NextResponse(challenge, { status: 200 });
+    return new Response(challenge, { status: 200 });
   }
 
-  return new NextResponse("Forbidden", { status: 403 });
+  return new Response("Forbidden", { status: 403 });
 }
 
 export async function POST(req: Request) {
@@ -246,6 +260,34 @@ export async function POST(req: Request) {
       });
     }
 
+    // Hard stop: sin fromPhone => no contactKey
+    if (!extracted.fromPhone) {
+      await prisma.webhookEvent.update({
+        where: { id: raw.id },
+        data: { status: "FAILED", processedAt: new Date() },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        processed: false,
+        reason: "Invalid fromPhone (cannot derive contactKey)",
+      });
+    }
+
+    // Hard stop: sin providerMessageId => idempotencia débil (NULL)
+    if (!extracted.providerMessageId) {
+      await prisma.webhookEvent.update({
+        where: { id: raw.id },
+        data: { status: "FAILED", processedAt: new Date() },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        processed: false,
+        reason: "Missing providerMessageId (cannot ensure idempotency)",
+      });
+    }
+
     const channel = "whatsapp";
     const contactKey = extracted.fromPhone;
 
@@ -257,18 +299,23 @@ export async function POST(req: Request) {
         businessId,
         channel,
         contactKey,
-        contactDisplay: contactKey,
+        contactDisplay: extracted.contactName?.trim() || contactKey,
         lastMessageAt: new Date(),
       },
       update: {
         lastMessageAt: new Date(),
+        contactDisplay: extracted.contactName?.trim() || contactKey,
       },
       select: { id: true, clientId: true },
     });
 
     if (!conversation.clientId) {
+      const candidates = phoneCandidates(extracted.fromRaw).concat(
+        phoneCandidates(contactKey)
+      );
+
       const existingClient = await prisma.client.findFirst({
-        where: { businessId, phone: contactKey },
+        where: { businessId, phone: { in: candidates } },
         select: { id: true },
       });
 
@@ -293,7 +340,7 @@ export async function POST(req: Request) {
           provider: PROVIDER,
           providerMessageId: extracted.providerMessageId,
           fromPhone: extracted.fromPhone,
-          toPhone, // ✅ correcto
+          toPhone,
           text: extracted.text,
           payload: extracted.rawMessage,
           status: "DELIVERED",
@@ -337,7 +384,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     await prisma.webhookEvent.update({
       where: { id: raw.id },
-      data: { status: "FAILED" },
+      data: { status: "FAILED", processedAt: new Date() },
     });
 
     return NextResponse.json(

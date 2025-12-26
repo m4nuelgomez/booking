@@ -111,16 +111,16 @@ export default function TopbarMenu({
               className="block px-4 py-3 text-sm text-white/90 hover:bg-white/10"
               onClick={closeMenu}
             >
-              Dashboard
+              Panel
             </Link>
 
             <div className="h-px bg-white/10" />
 
             <button
               onClick={onLogout}
-              className="block w-full px-4 py-3 text-left text-sm text-red-200 hover:bg-white/10"
+              className="block w-full px-4 py-3 text-left text-sm text-white/80 hover:bg-white/10"
             >
-              Logout
+              Cerrar sesión
             </button>
           </div>,
           document.body

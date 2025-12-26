@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { formatPhoneForDisplay } from "@/lib/phone";
 
 type Client = { id: string; name: string | null; phone: string };
 type Props = {
@@ -30,6 +32,53 @@ export default function ClientLinkButton({
   const [newPhone, setNewPhone] = useState(
     channel === "whatsapp" ? contactKey : ""
   );
+
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  function clamp(n: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function compute() {
+      const el = btnRef.current;
+      if (!el) return;
+
+      const r = el.getBoundingClientRect();
+
+      const panelW = 520; // ~max-w-lg (512) + aire
+      const gutter = 12;
+
+      const left = clamp(r.left, gutter, window.innerWidth - panelW - gutter);
+
+      const top = r.bottom + 10;
+
+      setPos({
+        top,
+        left,
+        width: Math.min(panelW, window.innerWidth - gutter * 2),
+      });
+    }
+
+    compute();
+    window.addEventListener("resize", compute);
+    window.addEventListener("scroll", compute, true); // importante: scroll dentro de contenedores
+
+    return () => {
+      window.removeEventListener("resize", compute);
+      window.removeEventListener("scroll", compute, true);
+    };
+  }, [open]);
 
   const displayInitialName = useMemo(() => {
     if (!initialClient) return null;
@@ -160,168 +209,203 @@ export default function ClientLinkButton({
     }
   }
 
+  const hasClient = Boolean(initialClient);
+
   return (
     <>
       <button
+        ref={btnRef}
         onClick={() => {
           setErr(null);
-          setOpen(true);
+          setOpen((v) => !v);
         }}
-        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/90 hover:bg-white/10"
         title={title}
+        className={[
+          "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition",
+          hasClient
+            ? "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+            : "bg-white/5 text-white/80 hover:bg-white/10 border border-white/10",
+        ].join(" ")}
       >
-        {initialClient ? "Cliente" : "Vincular"}
+        <span
+          className={[
+            "h-2 w-2 rounded-full",
+            hasClient ? "bg-emerald-400" : "bg-zinc-400",
+          ].join(" ")}
+        />
+        {hasClient ? "Cliente" : "Sin cliente"}
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-[2147483647] bg-black/60 backdrop-blur-sm grid place-items-center p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111b21] shadow-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-              <div className="text-sm font-semibold text-white">
-                Vincular cliente
-              </div>
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  setErr(null);
-                }}
-                className="text-white/70 hover:text-white"
+      {mounted && open && pos
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[2147483647]"
+              onMouseDown={() => {
+                setOpen(false);
+                setErr(null);
+              }}
+            >
+              {/* backdrop */}
+              <div className="absolute inset-0 bg-black/50" />
+
+              {/* panel anclado */}
+              <div
+                className="fixed"
+                style={{ top: pos.top, left: pos.left, width: pos.width }}
+                onMouseDown={(e) => e.stopPropagation()}
               >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {initialClient ? (
-                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                  <div className="text-sm text-white">
-                    Actual:{" "}
-                    <span className="font-semibold">
-                      {displayInitialName ?? "Cliente"}
-                    </span>
-                  </div>
-                  <div className="text-xs text-white/60 mt-1">
-                    {initialClient.phone || contactDisplay || "—"}
-                  </div>
-
-                  <div className="mt-3 flex gap-2">
+                <div className="w-full rounded-2xl border border-white/10 bg-[#111b21] shadow-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-white">
+                      Vincular cliente
+                    </div>
                     <button
-                      onClick={() => link(null)}
-                      className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200 hover:bg-red-500/20"
+                      onClick={() => {
+                        setOpen(false);
+                        setErr(null);
+                      }}
+                      className="text-white/70 hover:text-white"
                     >
-                      Desvincular
+                      ✕
                     </button>
                   </div>
-                </div>
-              ) : null}
 
-              {/* Buscar */}
-              <div className="flex gap-2">
-                <input
-                  value={q}
-                  onChange={(e) => {
-                    setQ(e.target.value);
-                    if (err) setErr(null);
-                  }}
-                  className="flex-1 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                  placeholder="Buscar por nombre o teléfono…"
-                />
-                <button
-                  onClick={onSearch}
-                  className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold hover:opacity-90"
-                >
-                  Buscar
-                </button>
-              </div>
+                  <div className="p-4 space-y-4">
+                    {/* === TU CONTENIDO EXACTO, sin cambios === */}
+                    {initialClient ? (
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div className="text-sm text-white">
+                          Actual:{" "}
+                          <span className="font-semibold">
+                            {displayInitialName ?? "Cliente"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-white/60 mt-1">
+                          {initialClient.phone
+                            ? formatPhoneForDisplay(initialClient.phone)
+                            : contactDisplay || "—"}
+                        </div>
 
-              {err ? (
-                <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                  {err}
-                </div>
-              ) : null}
-
-              {/* Resultados */}
-              <div className="rounded-xl border border-white/10 overflow-hidden">
-                <div className="px-3 py-2 text-xs text-white/60 border-b border-white/10">
-                  Resultados
-                </div>
-
-                {loading ? (
-                  <div className="p-3 text-sm text-white/60">Cargando…</div>
-                ) : items.length === 0 ? (
-                  <div className="p-3 text-sm text-white/60">
-                    Sin resultados.
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-white/10">
-                    {items.map((c) => {
-                      const name = c.name?.trim() || c.phone || "Cliente";
-                      return (
-                        <li
-                          key={c.id}
-                          className="p-3 flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <div className="text-sm text-white truncate">
-                              {name}
-                            </div>
-                            <div className="text-xs text-white/60 truncate">
-                              {c.phone}
-                            </div>
-                          </div>
-
+                        <div className="mt-3 flex gap-2">
                           <button
-                            onClick={() => link(c.id)}
-                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/90 hover:bg-white/10"
+                            onClick={() => link(null)}
+                            className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200 hover:bg-red-500/20"
                           >
-                            Vincular
+                            Desvincular
                           </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
+                        </div>
+                      </div>
+                    ) : null}
 
-              {/* Crear */}
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
-                <div className="text-xs text-white/60">
-                  Crear cliente rápido
+                    <div className="flex gap-2">
+                      <input
+                        value={q}
+                        onChange={(e) => {
+                          setQ(e.target.value);
+                          if (err) setErr(null);
+                        }}
+                        className="flex-1 rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                        placeholder="Buscar por nombre o teléfono…"
+                      />
+                      <button
+                        onClick={onSearch}
+                        className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold hover:opacity-90"
+                      >
+                        Buscar
+                      </button>
+                    </div>
+
+                    {err ? (
+                      <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                        {err}
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-xl border border-white/10 overflow-hidden">
+                      <div className="px-3 py-2 text-xs text-white/60 border-b border-white/10">
+                        Resultados
+                      </div>
+
+                      {loading ? (
+                        <div className="p-3 text-sm text-white/60">
+                          Cargando…
+                        </div>
+                      ) : items.length === 0 ? (
+                        <div className="p-3 text-sm text-white/60">
+                          Sin resultados.
+                        </div>
+                      ) : (
+                        <ul className="divide-y divide-white/10">
+                          {items.map((c) => {
+                            const name = c.name?.trim() || c.phone || "Cliente";
+                            return (
+                              <li
+                                key={c.id}
+                                className="p-3 flex items-center justify-between gap-3"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-sm text-white truncate">
+                                    {name}
+                                  </div>
+                                  <div className="text-xs text-white/60 truncate">
+                                    {formatPhoneForDisplay(c.phone)}
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => link(c.id)}
+                                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/90 hover:bg-white/10"
+                                >
+                                  Vincular
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+                      <div className="text-xs text-white/60">
+                        Crear cliente rápido
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <input
+                          value={newName}
+                          onChange={(e) => setNewName(e.target.value)}
+                          className="rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                          placeholder="Nombre (opcional)"
+                        />
+                        <input
+                          value={newPhone}
+                          onChange={(e) => {
+                            setNewPhone(e.target.value);
+                            if (err) setErr(null);
+                          }}
+                          className="rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+                          placeholder={
+                            channel === "whatsapp"
+                              ? "Teléfono (WhatsApp)"
+                              : "Teléfono (opcional)"
+                          }
+                        />
+                      </div>
+
+                      <button
+                        onClick={createAndLink}
+                        className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold hover:opacity-90"
+                      >
+                        Crear y vincular
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="grid gap-2 md:grid-cols-2">
-                  <input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                    placeholder="Nombre (opcional)"
-                  />
-                  <input
-                    value={newPhone}
-                    onChange={(e) => {
-                      setNewPhone(e.target.value);
-                      if (err) setErr(null);
-                    }}
-                    className="rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                    placeholder={
-                      channel === "whatsapp"
-                        ? "Teléfono (WhatsApp)"
-                        : "Teléfono (opcional)"
-                    }
-                  />
-                </div>
-
-                <button
-                  onClick={createAndLink}
-                  className="rounded-xl bg-white text-black px-4 py-2 text-sm font-semibold hover:opacity-90"
-                >
-                  Crear y vincular
-                </button>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }

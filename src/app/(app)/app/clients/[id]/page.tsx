@@ -4,23 +4,38 @@ import { prisma } from "@/lib/prisma";
 import { requireBusinessId } from "@/lib/auth";
 import OpenClientChatButton from "./OpenClientChatButton";
 import CopyPhoneButton from "./CopyPhoneButton";
+import {
+  Calendar as CalendarIcon,
+  MessageSquareText,
+  ChevronLeft,
+  Phone,
+  Activity,
+} from "lucide-react";
+import type { MessageDirection } from "@prisma/client";
+
+type AppointmentStatus = "SCHEDULED" | "COMPLETED" | "CANCELED" | "NO_SHOW";
 
 type ClientAppointment = {
   id: string;
   startsAt: Date;
   endsAt: Date | null;
   service: string | null;
-  status: string;
+  status: AppointmentStatus;
 };
 
-type ClientConversationPreview = {
+export type ClientConversationPreview = {
   id: string;
+
+  channel: string;
+  contactKey: string;
+  contactDisplay: string | null;
+
   lastMessageAt: Date | null;
-  messages: {
-    text: string | null;
-    direction: "INBOUND" | "OUTBOUND";
-    createdAt: Date;
-  }[];
+  unreadCount: number;
+
+  lastMessageText: string | null;
+  lastMessageDir: MessageDirection | null;
+  lastMessageCreatedAt: Date | null;
 };
 
 type ClientDetail = {
@@ -45,7 +60,6 @@ function formatPhoneDisplay(raw: string) {
   const digits = s.replace(/[^\d]/g, "");
   if (!digits) return s;
 
-  // formateo básico MX: +52 993 346 7397 (si es +52XXXXXXXXXX)
   if (digits.startsWith("52") && digits.length === 12) {
     const ten = digits.slice(2);
     return `+52 ${ten.slice(0, 3)} ${ten.slice(3, 6)} ${ten.slice(6)}`;
@@ -93,17 +107,54 @@ function appointmentLabel(a: { startsAt: Date; endsAt: Date | null }) {
   return endTime ? `${day} · ${time}–${endTime}` : `${day} · ${time}`;
 }
 
-function statusPill(status: string) {
-  const s = String(status ?? "SCHEDULED");
+function appointmentStatusLabel(status: AppointmentStatus) {
+  switch (status) {
+    case "SCHEDULED":
+      return "Programada";
+    case "COMPLETED":
+      return "Completada";
+    case "CANCELED":
+      return "Cancelada";
+    case "NO_SHOW":
+      return "No asistió";
+  }
+}
 
+function appointmentStatusPill(status: AppointmentStatus) {
   const base =
     "rounded-full border px-3 py-1 text-xs font-medium inline-flex items-center gap-2";
 
-  if (s === "CONFIRMED")
+  if (status === "COMPLETED")
     return `${base} border-emerald-900/50 bg-emerald-950/40 text-emerald-200`;
-  if (s === "CANCELED")
+  if (status === "CANCELED")
     return `${base} border-red-900/50 bg-red-950/35 text-red-200`;
+  if (status === "NO_SHOW")
+    return `${base} border-amber-900/40 bg-amber-950/30 text-amber-200`;
+
   return `${base} border-zinc-800 bg-zinc-950 text-zinc-300`;
+}
+
+function channelLabel(ch: string | null | undefined) {
+  const c = String(ch ?? "unknown").toLowerCase();
+  if (c === "whatsapp") return "WhatsApp";
+  if (c === "instagram") return "Instagram";
+  if (c === "email") return "Email";
+  if (c === "tiktok") return "TikTok";
+  return "Canal";
+}
+
+function channelDotClass(ch: string | null | undefined) {
+  const c = String(ch ?? "unknown").toLowerCase();
+  if (c === "whatsapp") return "bg-emerald-500";
+  if (c === "instagram") return "bg-pink-500";
+  if (c === "email") return "bg-sky-500";
+  if (c === "tiktok") return "bg-violet-500";
+  return "bg-zinc-600";
+}
+
+function previewText(text: string | null | undefined) {
+  if (!text) return "";
+  return text.length > 60 ? text.slice(0, 60) + "…" : text;
 }
 
 export default async function ClientDetailPage({
@@ -114,7 +165,7 @@ export default async function ClientDetailPage({
   const { id } = await params;
   const businessId = await requireBusinessId();
 
-  const client: ClientDetail | null = await prisma.client.findFirst({
+  const raw = await prisma.client.findFirst({
     where: { id, businessId },
     select: {
       id: true,
@@ -123,25 +174,28 @@ export default async function ClientDetailPage({
       notes: true,
       createdAt: true,
       updatedAt: true,
+
       conversations: {
         orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
-        take: 1,
+        take: 5,
         select: {
           id: true,
+          channel: true,
+          contactKey: true,
+          contactDisplay: true,
           lastMessageAt: true,
+          unreadCount: true,
           messages: {
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: {
-              text: true,
-              direction: true,
-              createdAt: true,
-            },
+            select: { text: true, direction: true, createdAt: true },
           },
         },
       },
+
       appointments: {
         orderBy: { startsAt: "desc" },
+        take: 8,
         select: {
           id: true,
           startsAt: true,
@@ -149,67 +203,97 @@ export default async function ClientDetailPage({
           service: true,
           status: true,
         },
-        take: 8,
       },
+
       _count: {
         select: { appointments: true, conversations: true },
       },
     },
   });
 
-  if (!client) {
+  if (!raw) {
     return <div className="text-sm text-zinc-400">Cliente no encontrado.</div>;
   }
 
-  const existingConversationId = client.conversations[0]?.id ?? null;
-  const lastMsgAt = client.conversations[0]?.lastMessageAt ?? null;
+  const client: ClientDetail = {
+    ...raw,
+    conversations: (raw.conversations ?? []).map((c) => {
+      const m = c.messages?.[0] ?? null;
 
-  const lastMessage = client.conversations[0]?.messages?.[0] ?? null;
+      const preview: ClientConversationPreview = {
+        id: c.id,
 
-  function previewText(text: string | null | undefined) {
-    if (!text) return "";
-    return text.length > 60 ? text.slice(0, 60) + "…" : text;
-  }
+        channel: c.channel,
+        contactKey: c.contactKey,
+        contactDisplay: c.contactDisplay,
 
-  const title = client.name ?? "Cliente WhatsApp";
+        lastMessageAt: c.lastMessageAt ?? null,
+        unreadCount: c.unreadCount ?? 0,
+
+        lastMessageText: m?.text ?? null,
+        lastMessageDir: m?.direction ?? null,
+        lastMessageCreatedAt: m?.createdAt ?? null,
+      };
+
+      return preview;
+    }),
+  };
+
+  const primaryConvo = client.conversations[0] ?? null;
+  const existingConversationId = primaryConvo?.id ?? null;
+
+  const lastMsgAt = primaryConvo?.lastMessageAt ?? null;
+  const channel = primaryConvo?.channel ?? null;
+
+  const lastMessage = primaryConvo?.lastMessageCreatedAt
+    ? {
+        text: primaryConvo.lastMessageText,
+        direction: primaryConvo.lastMessageDir,
+        createdAt: primaryConvo.lastMessageCreatedAt,
+      }
+    : null;
+
+  const title = client.name ?? "Cliente";
   const phoneDisplay = formatPhoneDisplay(client.phone);
 
   return (
     <div className="space-y-6">
-      {/* ✅ Todo vive dentro de la misma grid para que el layout se sienta “cuadrado” */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Header (full width dentro de la grid) */}
+        {/* Header */}
         <div className="lg:col-span-3">
-          {/* Header */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-3">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              {/* Left */}
               <div className="min-w-0 max-w-3xl">
                 <Link
                   href="/app/clients"
                   className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200"
                 >
-                  <span className="text-zinc-500">←</span>
+                  <ChevronLeft
+                    size={16}
+                    strokeWidth={1.75}
+                    className="text-zinc-500"
+                  />
                   <span>Clientes</span>
                 </Link>
 
                 <div className="mt-3 flex items-start gap-3">
-                  {/* Avatar */}
                   <div className="h-10 w-10 shrink-0 rounded-full border border-zinc-800 bg-zinc-950 flex items-center justify-center text-sm font-semibold text-zinc-200">
                     {(title?.trim()?.[0] ?? "C").toUpperCase()}
                   </div>
 
-                  {/* Title + meta */}
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h1 className="text-2xl font-semibold leading-tight truncate">
                         {title}
                       </h1>
 
-                      {/* Badge provider */}
                       <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                        WhatsApp
+                        <span
+                          className={`h-2 w-2 rounded-full ${channelDotClass(
+                            channel
+                          )}`}
+                        />
+                        {channelLabel(channel)}
                       </span>
                     </div>
 
@@ -224,25 +308,40 @@ export default async function ClientDetailPage({
                       </span>
                     </div>
 
-                    {/* Chips */}
+                    {/* Chips (sin emojis) */}
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
-                        📅 {client._count.appointments} cita
+                      <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
+                        <CalendarIcon
+                          size={14}
+                          strokeWidth={1.75}
+                          className="text-zinc-500"
+                        />
+                        {client._count.appointments} cita
                         {client._count.appointments === 1 ? "" : "s"}
                       </span>
-                      <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
-                        💬 {client._count.conversations} chat
+
+                      <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
+                        <MessageSquareText
+                          size={14}
+                          strokeWidth={1.75}
+                          className="text-zinc-500"
+                        />
+                        {client._count.conversations} chat
                         {client._count.conversations === 1 ? "" : "s"}
                       </span>
-                      <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
-                        <span className="inline-flex items-center gap-2">
-                          <span
-                            className={`h-2 w-2 rounded-full ${
-                              lastMsgAt ? "bg-emerald-500" : "bg-zinc-600"
-                            }`}
-                          />
-                          {lastMsgAt ? "Activo" : "Nuevo"}
-                        </span>
+
+                      <span className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-xs text-zinc-300">
+                        <Activity
+                          size={14}
+                          strokeWidth={1.75}
+                          className="text-zinc-500"
+                        />
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            lastMsgAt ? "bg-emerald-500" : "bg-zinc-600"
+                          }`}
+                        />
+                        {lastMsgAt ? "Activo" : "Nuevo"}
                       </span>
                     </div>
                   </div>
@@ -268,7 +367,7 @@ export default async function ClientDetailPage({
           </div>
         </div>
 
-        {/* Left (main) */}
+        {/* Left */}
         <div className="lg:col-span-2 space-y-6">
           {/* Actividad reciente */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
@@ -276,21 +375,18 @@ export default async function ClientDetailPage({
               <div className="text-sm font-medium text-zinc-200">
                 Actividad reciente
               </div>
-              <Link
-                href={
-                  existingConversationId
-                    ? `/app/inbox/${existingConversationId}`
-                    : "#"
-                }
-                className={`text-sm ${
-                  existingConversationId
-                    ? "text-emerald-400 hover:text-emerald-300"
-                    : "text-zinc-600 cursor-not-allowed"
-                }`}
-                aria-disabled={!existingConversationId}
-              >
-                Abrir inbox
-              </Link>
+              {existingConversationId ? (
+                <Link
+                  href={`/app/inbox/${existingConversationId}`}
+                  className="text-sm text-emerald-400 hover:text-emerald-300"
+                >
+                  Abrir inbox
+                </Link>
+              ) : (
+                <span className="text-sm text-zinc-600 cursor-not-allowed">
+                  Abrir inbox
+                </span>
+              )}
             </div>
 
             <div className="px-4 py-4 text-sm text-zinc-400">
@@ -298,7 +394,12 @@ export default async function ClientDetailPage({
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-sm text-zinc-300">
-                      <span>💬 Último mensaje</span>
+                      <MessageSquareText
+                        size={16}
+                        strokeWidth={1.75}
+                        className="text-zinc-500"
+                      />
+                      <span>Último mensaje</span>
                       {lastMessage.direction === "OUTBOUND" && (
                         <span className="text-zinc-500">· Tú</span>
                       )}
@@ -310,7 +411,9 @@ export default async function ClientDetailPage({
                   </div>
 
                   <div className="text-xs text-zinc-500 whitespace-nowrap">
-                    {new Date(lastMessage.createdAt).toLocaleString("es-MX")}
+                    {lastMessage.createdAt
+                      ? new Date(lastMessage.createdAt).toLocaleString("es-MX")
+                      : "—"}
                   </div>
                 </div>
               ) : (
@@ -374,7 +477,10 @@ export default async function ClientDetailPage({
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <span className={statusPill(a.status)}>{a.status}</span>
+                        <span className={appointmentStatusPill(a.status)}>
+                          {appointmentStatusLabel(a.status)}
+                        </span>
+
                         {existingConversationId ? (
                           <Link
                             href={`/app/inbox/${existingConversationId}`}
@@ -392,7 +498,7 @@ export default async function ClientDetailPage({
           </div>
         </div>
 
-        {/* Right (side) */}
+        {/* Right */}
         <div className="space-y-6">
           {/* Detalles */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
@@ -403,7 +509,14 @@ export default async function ClientDetailPage({
             <div className="px-4 py-4 space-y-3 text-sm">
               <div>
                 <div className="text-zinc-500">Teléfono</div>
-                <div className="text-zinc-200 select-text">{phoneDisplay}</div>
+                <div className="inline-flex items-center gap-2 text-zinc-200 select-text">
+                  <Phone
+                    size={16}
+                    strokeWidth={1.75}
+                    className="text-zinc-500"
+                  />
+                  {phoneDisplay}
+                </div>
               </div>
 
               <div>
@@ -429,14 +542,13 @@ export default async function ClientDetailPage({
             </div>
           </div>
 
-          {/* Acciones rápidas (sin duplicar Chat/Agenda porque ya están arriba) */}
+          {/* Acciones rápidas */}
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
             <div className="border-b border-zinc-800 px-4 py-3 text-sm font-medium text-zinc-200">
               Acciones rápidas
             </div>
 
             <div className="px-4 py-3 space-y-2">
-              {/* ✅ botón interactivo aislado en Client Component */}
               <CopyPhoneButton phone={client.phone} />
 
               <Link

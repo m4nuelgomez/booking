@@ -123,62 +123,40 @@ export default function Sidebar({
 
   return (
     <div className="h-full flex flex-col bg-neutral-950 text-white">
-      {/* Header (respond.io-ish) */}
-      <div className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-neutral-950">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="h-9 w-9 rounded-full bg-white/10 border border-white/10 grid place-items-center font-bold text-sm">
-            N
+      {/* Filters / Search */}
+      <div className="sticky top-0 z-10 bg-neutral-950">
+        <div className="px-3 py-3 flex items-center gap-2">
+          <div className="flex-1 h-9 rounded-lg border border-white/10 bg-white/5 flex items-center gap-2 px-3">
+            <span className="text-white/50">
+              {/* icon search */}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  opacity="0.85"
+                />
+                <path
+                  d="M16.5 16.5 21 21"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  opacity="0.85"
+                />
+              </svg>
+            </span>
+
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar por nombre o contacto..."
+              className="w-full bg-transparent outline-none text-sm text-white placeholder:text-white/40"
+            />
           </div>
-          <div className="font-semibold truncate">Chats</div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="h-9 w-9 rounded-lg border border-white/10 hover:bg-white/10 transition"
-            title="New chat"
-            aria-label="New chat"
-          >
-            +
+          <button className="h-9 px-3 rounded-lg border border-white/10 text-sm text-white/80 hover:bg-white/10">
+            Filtros
           </button>
-          <button
-            type="button"
-            className="h-9 w-9 rounded-lg border border-white/10 hover:bg-white/10 transition"
-            title="Menu"
-            aria-label="Menu"
-          >
-            ⋯
-          </button>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div className="px-3 py-3 border-b border-white/10">
-        <div className="h-9 rounded-lg border border-white/10 bg-white/5 flex items-center gap-2 px-3">
-          <span className="text-white/50">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                opacity="0.85"
-              />
-              <path
-                d="M16.5 16.5 21 21"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                opacity="0.85"
-              />
-            </svg>
-          </span>
-
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name, contact..."
-            className="w-full bg-transparent outline-none text-sm text-white placeholder:text-white/40"
-          />
         </div>
       </div>
 
@@ -186,7 +164,7 @@ export default function Sidebar({
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="p-4 text-neutral-500 text-sm">
-            No conversations yet.
+            Aún no hay conversaciones.
           </div>
         ) : (
           <ul className="m-0 p-0 list-none">
@@ -196,7 +174,7 @@ export default function Sidebar({
               const preview = c.lastText ? c.lastText : "";
               const prefix =
                 c.lastDirection === "OUTBOUND"
-                  ? "You: "
+                  ? "Tú: "
                   : c.lastDirection === "INBOUND"
                   ? ""
                   : "";
@@ -210,14 +188,15 @@ export default function Sidebar({
                   <Link
                     href={`/app/inbox/${c.id}`}
                     className={[
-                      "block",
-                      "px-3 py-3",
-                      "border-b border-white/5",
+                      "block mx-2 my-2 rounded-xl border border-white/10",
+                      "bg-white/[0.03]",
                       "transition",
-                      isActive ? "bg-white/10" : "hover:bg-white/5",
+                      isActive
+                        ? "border-emerald-500/60 bg-white/[0.06]"
+                        : "hover:bg-white/[0.05]",
                     ].join(" ")}
                   >
-                    <div className="flex gap-3 items-center">
+                    <div className="flex gap-3 items-center px-3 py-3">
                       {/* Avatar */}
                       <div className="w-10 h-10 rounded-full bg-white/10 border border-white/10 grid place-items-center font-bold text-xs flex-none text-white/90">
                         {initials(c.displayName, c.contactKey)}
@@ -258,8 +237,8 @@ export default function Sidebar({
                           {showUnread && (
                             <div
                               className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-neutral-900 text-[11px] font-extrabold grid place-items-center flex-none"
-                              aria-label={`Unread ${effectiveUnread}`}
-                              title={`${effectiveUnread} unread`}
+                              aria-label={`Sin leer ${effectiveUnread}`}
+                              title={`${effectiveUnread} sin leer`}
                             >
                               {effectiveUnread > 99 ? "99+" : effectiveUnread}
                             </div>

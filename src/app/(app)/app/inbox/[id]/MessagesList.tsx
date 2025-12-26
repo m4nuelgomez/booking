@@ -382,22 +382,15 @@ export default function MessagesList({
   }, [messages.length]);
 
   return (
-    <div
-      className="relative h-full min-h-0 flex flex-col"
-      style={{ background: "var(--wa-panel)" }}
-    >
-      <div
-        className="shrink-0 px-4 pt-3 pb-3"
-        style={{ background: "var(--wa-panel)" }}
-      >
+    <div className="relative flex flex-col flex-1 min-h-0 bg-transparent">
+      <div className="shrink-0 px-4 pt-3 pb-3 bg-transparent">
         <AppointmentCard conversationId={conversationId} nextAppt={nextAppt} />
       </div>
 
       {/* ✅ Scroll area SOLO mensajes */}
       <div
         ref={wrapRef}
-        className="chatScroll flex-1 min-h-0 overflow-y-auto px-4 py-3"
-        style={{ background: "var(--wa-panel)" }}
+        className="chatScroll flex-1 min-h-0 overflow-y-auto px-4 py-3 pb-4 bg-transparent overscroll-contain"
       >
         <div className="space-y-2">
           {messages.map((m, idx) => {

@@ -61,7 +61,7 @@ export default async function InboxLayout({
   });
 
   return (
-    <div className="h-full min-h-0 bg-neutral-950">
+    <div className="h-full min-h-0 bg-neutral-950 overflow-hidden">
       {/* 3 columnas: Segments / Chats / Conversation */}
       <div className="h-full min-h-0 flex">
         <SegmentsPanel />
@@ -70,7 +70,9 @@ export default async function InboxLayout({
           <Sidebar items={items} activeId={activeId} />
         </aside>
 
-        <section className="flex-1 min-w-0 h-full">{children}</section>
+        <section className="flex-1 min-w-0 h-full min-h-0 overflow-hidden">
+          {children}
+        </section>
       </div>
     </div>
   );

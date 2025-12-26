@@ -21,65 +21,73 @@ function startOfTomorrow() {
   return d;
 }
 
+function previewText(s: string) {
+  const t = (s ?? "").trim();
+  if (!t) return "—";
+  return t.length > 42 ? t.slice(0, 42) + "…" : t;
+}
+
 export default async function DashboardPage() {
   const businessId = await requireBusinessId();
 
   const from = startOfToday();
   const to = startOfTomorrow();
 
-  const [apptToday, unreadAgg, nextAppts, recentConvos] = await Promise.all([
-    prisma.appointment.count({
-      where: {
-        businessId,
-        startsAt: { gte: from, lt: to },
-        status: "SCHEDULED",
-      },
-    }),
-
-    prisma.conversation.aggregate({
-      where: { businessId },
-      _sum: { unreadCount: true },
-    }),
-
-    prisma.appointment.findMany({
-      where: {
-        businessId,
-        startsAt: { gte: new Date() },
-        status: "SCHEDULED",
-      },
-      orderBy: { startsAt: "asc" },
-      take: 5,
-      select: {
-        id: true,
-        startsAt: true,
-        service: true,
-        client: { select: { id: true, name: true, phone: true } },
-        conversationId: true,
-      },
-    }),
-
-    prisma.conversation.findMany({
-      where: { businessId },
-      orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
-      take: 5,
-      select: {
-        id: true,
-        channel: true,
-        contactKey: true,
-        contactDisplay: true,
-        lastMessageAt: true,
-        unreadCount: true,
-        client: {
-          select: { id: true, name: true, phone: true },
+  const [apptToday, unreadAgg, nextAppts, recentConvos, clientsCount] =
+    await Promise.all([
+      prisma.appointment.count({
+        where: {
+          businessId,
+          startsAt: { gte: from, lt: to },
+          status: "SCHEDULED",
         },
-        messages: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          select: { direction: true, text: true, createdAt: true },
+      }),
+
+      prisma.conversation.aggregate({
+        where: { businessId },
+        _sum: { unreadCount: true },
+      }),
+
+      prisma.appointment.findMany({
+        where: {
+          businessId,
+          startsAt: { gte: new Date() },
+          status: "SCHEDULED",
         },
-      },
-    }),
-  ]);
+        orderBy: { startsAt: "asc" },
+        take: 5,
+        select: {
+          id: true,
+          startsAt: true,
+          service: true,
+          client: { select: { id: true, name: true, phone: true } },
+          conversationId: true,
+        },
+      }),
+
+      prisma.conversation.findMany({
+        where: { businessId },
+        orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
+        take: 5,
+        select: {
+          id: true,
+          channel: true,
+          contactKey: true,
+          contactDisplay: true,
+          lastMessageAt: true,
+          unreadCount: true,
+          client: {
+            select: { id: true, name: true, phone: true },
+          },
+          messages: {
+            take: 1,
+            orderBy: { createdAt: "desc" },
+            select: { direction: true, text: true, createdAt: true },
+          },
+        },
+      }),
+      prisma.client.count({ where: { businessId } }),
+    ]);
 
   const unread = unreadAgg._sum.unreadCount ?? 0;
 
@@ -87,13 +95,13 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <DashboardAutoRefresh ms={3000} />
       <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-zinc-400">Resumen rápido de hoy</p>
+        <h1 className="text-2xl font-semibold">Panel</h1>
+        <p className="text-sm text-white/60">Resumen rápido de hoy</p>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div className="text-sm text-zinc-400">Citas hoy</div>
+        <div className="wa-card p-4">
+          <div className="text-sm text-white/60">Citas hoy</div>
           <div className="mt-2 text-3xl font-semibold">{apptToday}</div>
           <div className="mt-3">
             <Link
@@ -105,8 +113,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div className="text-sm text-zinc-400">Mensajes sin leer</div>
+        <div className="wa-card p-4">
+          <div className="text-sm text-white/60">Mensajes sin leer</div>
           <div className="mt-2 text-3xl font-semibold">{unread}</div>
           <div className="mt-3">
             <Link
@@ -118,8 +126,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div className="text-sm text-zinc-400">Próximas citas</div>
+        <div className="wa-card p-4">
+          <div className="text-sm text-white/60">Próximas citas</div>
           <div className="mt-2 text-3xl font-semibold">{nextAppts.length}</div>
           <div className="mt-3">
             <Link
@@ -131,9 +139,9 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4">
-          <div className="text-sm text-zinc-400">Clientes</div>
-          <div className="mt-2 text-3xl font-semibold">→</div>
+        <div className="wa-card p-4">
+          <div className="text-sm text-white/60">Clientes</div>
+          <div className="mt-2 text-3xl font-semibold">{clientsCount}</div>
           <div className="mt-3">
             <Link
               href="/app/clients"
@@ -147,9 +155,9 @@ export default async function DashboardPage() {
 
       <WhatsAppSettingsCard />
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <div className="text-sm text-zinc-300">Próximas citas</div>
+      <div className="wa-card">
+        <div className="flex items-center justify-between wa-cardHeader px-4 py-3">
+          <div className="text-sm text-white/75">Próximas citas</div>
           <Link
             href="/app/agenda"
             className="text-sm text-emerald-400 hover:underline"
@@ -159,11 +167,11 @@ export default async function DashboardPage() {
         </div>
 
         {nextAppts.length === 0 ? (
-          <div className="px-4 py-8 text-sm text-zinc-400">
+          <div className="px-4 py-8 text-sm text-white/60">
             No hay citas próximas.
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-white/10">
             {nextAppts.map((a) => {
               const who = a.client?.name ?? a.client?.phone ?? "Cliente";
               const when = new Date(a.startsAt).toLocaleString("es-MX");
@@ -171,9 +179,9 @@ export default async function DashboardPage() {
                 <li key={a.id} className="px-4 py-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="text-sm text-zinc-400">{when}</div>
+                      <div className="text-sm text-white/60">{when}</div>
                       <div className="mt-1 text-base font-semibold">{who}</div>
-                      <div className="mt-1 text-sm text-zinc-300">
+                      <div className="mt-1 text-sm text-white/70">
                         {a.service ?? "Servicio"}
                       </div>
                     </div>
@@ -182,7 +190,7 @@ export default async function DashboardPage() {
                       {a.conversationId ? (
                         <Link
                           href={`/app/inbox/${a.conversationId}`}
-                          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
                         >
                           Chat
                         </Link>
@@ -191,7 +199,7 @@ export default async function DashboardPage() {
                       {a.client?.id ? (
                         <Link
                           href={`/app/clients/${a.client.id}`}
-                          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
                         >
                           Cliente
                         </Link>
@@ -205,9 +213,9 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30">
-        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-          <div className="text-sm text-zinc-300">Conversaciones recientes</div>
+      <div className="wa-card">
+        <div className="flex items-center justify-between wa-cardHeader px-4 py-3">
+          <div className="text-sm text-white/75">Conversaciones recientes</div>
           <Link
             href="/app/inbox"
             className="text-sm text-emerald-400 hover:underline"
@@ -217,11 +225,11 @@ export default async function DashboardPage() {
         </div>
 
         {recentConvos.length === 0 ? (
-          <div className="px-4 py-8 text-sm text-zinc-400">
+          <div className="px-4 py-8 text-sm text-white/60">
             Aún no hay conversaciones.
           </div>
         ) : (
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-white/10">
             {recentConvos.map((c) => {
               const who = c.client?.name ?? c.contactDisplay ?? c.contactKey;
               const last = c.messages[0]?.text ?? "";
@@ -235,11 +243,14 @@ export default async function DashboardPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-base font-semibold">{who}</div>
-                      <div className="mt-1 text-sm text-zinc-400">
-                        {you ? "Tú: " : ""}
-                        {last || "—"}
+                      <div className="mt-1 text-sm text-white/55">
+                        {you ? (
+                          <span className="text-white/70">Tú: </span>
+                        ) : null}
+                        {previewText(last)}
                       </div>
-                      <div className="mt-2 text-xs text-zinc-500">{when}</div>
+
+                      <div className="mt-2 text-xs text-white/45">{when}</div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -250,7 +261,7 @@ export default async function DashboardPage() {
                       ) : null}
                       <Link
                         href={`/app/inbox/${c.id}`}
-                        className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
                       >
                         Abrir
                       </Link>

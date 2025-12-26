@@ -67,28 +67,35 @@ export function SendBox({ conversationId }: { conversationId: string }) {
   const disabled = loading || !text.trim();
 
   return (
-    <div className="wa-composerInner">
-      <textarea
-        ref={taRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Escribe un mensaje"
-        rows={1}
-        className="wa-input"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            onSend();
-          }
-        }}
-      />
+    <div className="wa-composerInner flex items-end gap-2 px-3 py-2">
+      <div className="flex-1 rounded-2xl border border-white/10 bg-transparent px-3 py-2">
+        <textarea
+          ref={taRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Escribe un mensaje..."
+          rows={1}
+          className="w-full bg-transparent outline-none text-[14px] text-white placeholder:text-white/35 resize-none leading-5 min-h-[20px] max-h-[100px]"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSend();
+            }
+          }}
+        />
+      </div>
 
       <button
         onClick={onSend}
         disabled={disabled}
-        className={`wa-sendBtn ${disabled ? "is-disabled" : ""}`}
+        className={[
+          "h-10 w-10 self-center rounded-lg grid place-items-center transition",
+          disabled
+            ? "bg-white/5 text-white/30 cursor-not-allowed"
+            : "bg-emerald-500/90 text-neutral-950 hover:bg-emerald-500",
+        ].join(" ")}
         type="button"
-        aria-label="Send"
+        aria-label="Enviar"
         title="Enviar"
       >
         <SendIcon disabled={disabled} />

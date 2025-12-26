@@ -97,17 +97,6 @@ export default function TopbarMenu({
 
   return (
     <>
-      <button
-        ref={btnRef}
-        type="button"
-        className="wa-icon-btn relative z-200"
-        aria-label="Menu"
-        aria-expanded={open}
-        onClick={() => (open ? closeMenu() : openMenu())}
-      >
-        ⋮
-      </button>
-
       {mounted &&
         open &&
         pos &&

@@ -21,14 +21,24 @@ async function resolveBusinessAndToPhone(payload: any) {
     );
   }
 
-  const wa = await prisma.whatsAppAccount.findFirst({
-    where: { phoneNumberId },
-    select: { businessId: true, displayNumber: true, phoneNumberId: true },
+  const wa = await prisma.channelAccount.findUnique({
+    where: {
+      channel_providerAccountId: {
+        channel: "whatsapp",
+        providerAccountId: phoneNumberId,
+      },
+    },
+    select: {
+      businessId: true,
+      displayNumber: true,
+      providerAccountId: true,
+      config: true,
+    },
   });
 
   if (!wa) {
     throw new Error(
-      `WhatsAppAccount not found for phoneNumberId=${phoneNumberId}. Create mapping first.`
+      `ChannelAccount not found for WhatsApp phoneNumberId=${phoneNumberId}. Create mapping first.`
     );
   }
 
@@ -42,7 +52,7 @@ async function resolveBusinessAndToPhone(payload: any) {
 
   return {
     businessId: wa.businessId,
-    phoneNumberId: wa.phoneNumberId,
+    phoneNumberId: wa.providerAccountId,
     toPhone,
   };
 }
@@ -236,15 +246,18 @@ export async function POST(req: Request) {
       });
     }
 
-    const contactPhone = extracted.fromPhone;
+    const channel = "whatsapp";
+    const contactKey = extracted.fromPhone;
 
     let conversation = await prisma.conversation.upsert({
       where: {
-        businessId_contactPhone: { businessId, contactPhone },
+        businessId_channel_contactKey: { businessId, channel, contactKey },
       },
       create: {
         businessId,
-        contactPhone,
+        channel,
+        contactKey,
+        contactDisplay: contactKey,
         lastMessageAt: new Date(),
       },
       update: {
@@ -255,7 +268,7 @@ export async function POST(req: Request) {
 
     if (!conversation.clientId) {
       const existingClient = await prisma.client.findFirst({
-        where: { businessId, phone: contactPhone },
+        where: { businessId, phone: contactKey },
         select: { id: true },
       });
 

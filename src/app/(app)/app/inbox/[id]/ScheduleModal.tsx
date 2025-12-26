@@ -74,7 +74,7 @@ export default function ScheduleModal({
 
       const endsAt = addMinutes(startsAt, durationMin);
 
-      const res = await fetch("/api/appointments/create", {
+      const res = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

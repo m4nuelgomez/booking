@@ -1,166 +1,169 @@
-// src/app/api/appointments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizePhone } from "@/lib/phone";
-import { fromZonedTime } from "date-fns-tz";
-import { addMinutes } from "date-fns";
 import { requireBusinessIdFromReq } from "@/lib/auth-api";
+import { normalizePhone } from "@/lib/phone";
 
-export const runtime = "nodejs";
+type Body = {
+  conversationId?: string | null;
 
-const TZ = "America/Mexico_City";
+  phone?: string | null;
+  name?: string | null;
 
-function dayRangeUtc(dateStr?: string | null) {
-  const d = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : null;
-  const localDay = d ?? new Date().toISOString().slice(0, 10);
+  startsAt: string;
+  endsAt?: string | null;
+  durationMin?: number | null;
+  service?: string | null;
+  notes?: string | null;
+};
 
-  const startLocal = new Date(`${localDay}T00:00:00`);
-  const endLocal = new Date(`${localDay}T00:00:00`);
-  endLocal.setDate(endLocal.getDate() + 1);
-
-  const start = fromZonedTime(startLocal, TZ);
-  const end = fromZonedTime(endLocal, TZ);
-
-  return { start, end };
+function bad(msg: string, status = 400) {
+  return NextResponse.json({ ok: false, error: msg }, { status });
 }
 
-function localDateTimeToUtc(dateStr: string, timeStr: string) {
-  const local = new Date(`${dateStr}T${timeStr}:00`);
-  return fromZonedTime(local, TZ);
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function endOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
 }
 
 export async function GET(req: NextRequest) {
-  try {
-    const auth = requireBusinessIdFromReq(req);
-    if (!auth.ok) {
-      return NextResponse.json(
-        { ok: false, error: auth.error },
-        { status: auth.status }
-      );
-    }
-    const businessId = auth.businessId;
+  const auth = requireBusinessIdFromReq(req);
+  if (!auth.ok) return bad(auth.error, auth.status);
+  const businessId = auth.businessId;
 
-    const url = new URL(req.url);
-    const dateStr = url.searchParams.get("date");
-    const { start, end } = dayRangeUtc(dateStr);
+  const { searchParams } = new URL(req.url);
+  const dateStr = String(searchParams.get("date") ?? "").trim();
+  const includeCanceled = searchParams.get("includeCanceled") === "1";
 
-    const items = await prisma.appointment.findMany({
-      where: { businessId, startsAt: { gte: start, lt: end } },
-      orderBy: { startsAt: "asc" },
-      select: {
-        id: true,
-        startsAt: true,
-        endsAt: true,
-        service: true,
-        notes: true,
-        status: true,
-        client: { select: { id: true, name: true, phone: true } },
-        conversationId: true,
-      },
-    });
+  if (!dateStr) return bad("date is required (YYYY-MM-DD)");
 
-    return NextResponse.json({ ok: true, items });
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
-      { status: 500 }
-    );
-  }
+  const parsed = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(parsed.getTime())) return bad("date must be YYYY-MM-DD");
+
+  const from = startOfDay(parsed);
+  const to = endOfDay(parsed);
+
+  const appts = await prisma.appointment.findMany({
+    where: {
+      businessId,
+      startsAt: { gte: from, lte: to },
+      ...(includeCanceled ? {} : { status: { not: "CANCELED" } }),
+    },
+    orderBy: { startsAt: "asc" },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      service: true,
+      notes: true,
+      status: true,
+      clientId: true,
+      conversationId: true,
+      client: { select: { id: true, name: true, phone: true } },
+    },
+  });
+
+  const items = appts.map((a) => ({
+    id: a.id,
+    startsAt: a.startsAt.toISOString(),
+    endsAt: a.endsAt ? a.endsAt.toISOString() : null,
+    service: a.service,
+    notes: a.notes,
+    status: a.status,
+    clientId: a.clientId,
+    conversationId: a.conversationId,
+    client: a.client ? { ...a.client, phone: a.client.phone } : null,
+  }));
+
+  return NextResponse.json({ ok: true, items });
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const auth = requireBusinessIdFromReq(req);
-    if (!auth.ok) {
-      return NextResponse.json(
-        { ok: false, error: auth.error },
-        { status: auth.status }
-      );
-    }
-    const businessId = auth.businessId;
+  const auth = requireBusinessIdFromReq(req);
+  if (!auth.ok) return bad(auth.error, auth.status);
+  const businessId = auth.businessId;
 
-    const body = await req.json().catch(() => ({}));
+  const body = (await req.json().catch(() => ({}))) as Body;
 
-    const phoneRaw = String(body.phone ?? "").trim();
-    const phone = normalizePhone(phoneRaw); // <- YA QUEDA 521...
-    const name = body.name ? String(body.name).trim() : null;
+  const conversationId = body?.conversationId
+    ? String(body.conversationId)
+    : null;
 
-    const dateStr = String(body.date ?? "").trim();
-    const timeStr = String(body.time ?? "").trim();
-    const durationMin = Number(body.durationMin ?? 60);
+  const startsAt = body?.startsAt ? new Date(body.startsAt) : null;
+  if (!startsAt || Number.isNaN(startsAt.getTime())) {
+    return bad("startsAt must be a valid ISO date");
+  }
 
-    const service = body.service ? String(body.service).trim() : null;
-    const notes = body.notes ? String(body.notes).trim() : null;
+  let endsAt: Date | null = null;
+  if (body?.endsAt) {
+    endsAt = new Date(body.endsAt);
+    if (Number.isNaN(endsAt.getTime()))
+      return bad("endsAt must be a valid ISO date");
+  } else if (body?.durationMin) {
+    const mins = Math.max(5, Number(body.durationMin));
+    endsAt = new Date(startsAt.getTime() + mins * 60_000);
+  }
 
-    if (!phone) {
-      return NextResponse.json(
-        { ok: false, error: "Phone is required" },
-        { status: 400 }
-      );
-    }
-    if (!dateStr || !timeStr) {
-      return NextResponse.json(
-        { ok: false, error: "Date and time are required" },
-        { status: 400 }
-      );
-    }
-    if (
-      !Number.isFinite(durationMin) ||
-      durationMin <= 0 ||
-      durationMin > 24 * 60
-    ) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid duration" },
-        { status: 400 }
-      );
-    }
+  if (endsAt && endsAt <= startsAt) return bad("endsAt must be after startsAt");
 
-    const startsAt = localDateTimeToUtc(dateStr, timeStr);
-    const endsAt = addMinutes(startsAt, durationMin);
+  const name = body?.name?.trim() ? body.name.trim() : null;
 
-    const client = await prisma.client.upsert({
+  let phone = normalizePhone(String(body?.phone ?? ""));
+
+  let convoClientId: string | null = null;
+
+  if (!phone) {
+    if (!conversationId) return bad("phone is required");
+
+    const convo = await prisma.conversation.findFirst({
+      where: { id: conversationId, businessId },
+      select: { contactKey: true, clientId: true },
+    });
+
+    if (!convo) return bad("Conversation not found", 404);
+
+    phone = normalizePhone(convo.contactKey);
+    if (!phone) return bad("Conversation has invalid contactKey phone");
+
+    convoClientId = convo.clientId ?? null;
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const client = await tx.client.upsert({
       where: { businessId_phone: { businessId, phone } },
-      create: { businessId, phone, name: name ?? undefined },
+      create: { businessId, phone, name },
       update: { name: name ?? undefined },
-      select: { id: true, phone: true, name: true },
+      select: { id: true },
     });
 
-    const convo = await prisma.conversation.findUnique({
-      where: {
-        businessId_contactPhone: {
-          businessId,
-          contactPhone: phone, // <- MISMO NORMALIZADO
-        },
-      },
-      select: { id: true, clientId: true },
-    });
-
-    if (convo && !convo.clientId) {
-      await prisma.conversation.update({
-        where: { id: convo.id },
+    if (conversationId && !convoClientId) {
+      await tx.conversation.updateMany({
+        where: { id: conversationId, businessId, clientId: null },
         data: { clientId: client.id },
       });
     }
 
-    const appt = await prisma.appointment.create({
+    const appt = await tx.appointment.create({
       data: {
         businessId,
         clientId: client.id,
-        conversationId: convo?.id ?? null,
+        conversationId: body.conversationId ?? null,
         startsAt,
         endsAt,
-        service,
-        notes,
+        service: body?.service?.trim() ? body.service.trim() : null,
+        notes: body?.notes?.trim() ? body.notes.trim() : null,
         status: "SCHEDULED",
       },
       select: { id: true },
     });
 
-    return NextResponse.json({ ok: true, id: appt.id });
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
-      { status: 500 }
-    );
-  }
+    return { clientId: client.id, appointmentId: appt.id };
+  });
+
+  return NextResponse.json({ ok: true, ...result });
 }

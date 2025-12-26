@@ -1,19 +1,11 @@
 export default function InboxIndexPage() {
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "grid",
-        placeItems: "center",
-        opacity: 0.7,
-        fontFamily: "system-ui",
-      }}
-    >
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>
+    <div className="h-full min-h-0 w-full grid place-items-center text-white/70">
+      <div className="text-center">
+        <div className="text-lg font-extrabold text-white">
           Select a conversation
         </div>
-        <div style={{ marginTop: 6, fontSize: 13 }}>
+        <div className="mt-1 text-sm text-white/60">
           Pick one from the left sidebar.
         </div>
       </div>

@@ -1,4 +1,3 @@
-// src/app/(app)/agenda/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -53,6 +52,12 @@ function todayLabel(dateStr: string) {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
+function addMinutesISO(startsAtISO: string, mins: number) {
+  const s = new Date(startsAtISO);
+  const e = new Date(s.getTime() + mins * 60_000);
+  return e.toISOString();
+}
+
 function diffMinutes(a: Date, b: Date) {
   return Math.max(1, Math.round((b.getTime() - a.getTime()) / 60000));
 }
@@ -63,7 +68,6 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // modal state
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
 
@@ -79,13 +83,17 @@ export default function AgendaPage() {
   const [durationMin, setDurationMin] = useState(60);
   const [service, setService] = useState("");
   const [notes, setNotes] = useState("");
+  const [showCanceled, setShowCanceled] = useState(false);
+  const [formDate, setFormDate] = useState(date);
 
   async function load() {
     setLoading(true);
     setErr(null);
     try {
       const res = await fetch(
-        `/api/appointments?date=${encodeURIComponent(date)}`
+        `/api/appointments?date=${encodeURIComponent(date)}&includeCanceled=${
+          showCanceled ? "1" : "0"
+        }`
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.ok) {
@@ -101,8 +109,7 @@ export default function AgendaPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date]);
+  }, [date, showCanceled]);
 
   const title = useMemo(() => formatShortEs(date), [date]);
 
@@ -126,14 +133,38 @@ export default function AgendaPage() {
     setLoading(true);
     setErr(null);
 
+    const prevItems = items;
+
     try {
       if (editing) {
-        // ✅ Reagendar/editar
+        const startsLocal = new Date(`${formDate}T${time}:00`);
+        const startsAtISO = startsLocal.toISOString();
+        const endsAtISO = addMinutesISO(startsAtISO, durationMin);
+
+        setItems((prev) => {
+          if (formDate !== date) {
+            return prev.filter((x) => x.id !== editing.id);
+          }
+
+          return prev.map((x) =>
+            x.id === editing.id
+              ? {
+                  ...x,
+                  startsAt: startsAtISO,
+                  endsAt: endsAtISO,
+                  service: service.trim() || null,
+                  notes: notes.trim() || null,
+                  status: "SCHEDULED",
+                }
+              : x
+          );
+        });
+
         const res = await fetch(`/api/appointments/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            date,
+            date: formDate,
             time,
             durationMin,
             service: service.trim() || null,
@@ -146,33 +177,33 @@ export default function AgendaPage() {
           throw new Error(data?.error ?? `HTTP ${res.status}`);
         }
       } else {
-        // ✅ Crear
-        const payload = {
-          phone,
-          name: name.trim() || null,
-          date,
-          time,
-          durationMin,
-          service: service.trim() || null,
-          notes: notes.trim() || null,
-        };
+        const startsAtISO = new Date(`${formDate}T${time}:00`).toISOString();
 
         const res = await fetch("/api/appointments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            phone,
+            name: name.trim() || null,
+            startsAt: startsAtISO,
+            durationMin,
+            service: service.trim() || null,
+            notes: notes.trim() || null,
+          }),
         });
 
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data?.ok) {
           throw new Error(data?.error ?? `HTTP ${res.status}`);
         }
+
         resetCreateFields();
       }
 
       closeModal();
       await load();
     } catch (e: any) {
+      setItems(prevItems);
       setErr(e?.message ?? "Error");
     } finally {
       setLoading(false);
@@ -185,6 +216,17 @@ export default function AgendaPage() {
 
     setLoading(true);
     setErr(null);
+
+    const prevItems = items;
+
+    if (showCanceled) {
+      setItems((prev) =>
+        prev.map((x) => (x.id === it.id ? { ...x, status: "CANCELED" } : x))
+      );
+    } else {
+      setItems((prev) => prev.filter((x) => x.id !== it.id));
+    }
+
     try {
       const res = await fetch(`/api/appointments/${it.id}`, {
         method: "PATCH",
@@ -196,9 +238,8 @@ export default function AgendaPage() {
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }
-
-      await load();
     } catch (e: any) {
+      setItems(prevItems);
       setErr(e?.message ?? "Error");
     } finally {
       setLoading(false);
@@ -211,7 +252,7 @@ export default function AgendaPage() {
     const s = new Date(it.startsAt);
     const e = it.endsAt ? new Date(it.endsAt) : null;
 
-    setDate(yyyyMmDd(s)); // mueve el día seleccionado
+    setFormDate(yyyyMmDd(s));
     setTime(hhmm(s));
     setDurationMin(e ? diffMinutes(s, e) : 60);
     setService(it.service ?? "");
@@ -245,7 +286,7 @@ export default function AgendaPage() {
               <button
                 onClick={() => {
                   setEditing(null);
-                  // defaults razonables para nueva cita
+                  setFormDate(date);
                   const d = new Date();
                   d.setMinutes(0, 0, 0);
                   setTime(hhmm(d));
@@ -308,9 +349,20 @@ export default function AgendaPage() {
               </button>
             </div>
 
-            <p className="text-xs text-zinc-500">
-              Tip: usa ← / → para moverte por días
-            </p>
+            <label className="flex cursor-pointer items-center gap-3 text-xs text-zinc-300">
+              <span>Mostrar canceladas</span>
+
+              <span className="relative inline-flex h-5 w-9 items-center">
+                <input
+                  type="checkbox"
+                  checked={showCanceled}
+                  onChange={(e) => setShowCanceled(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <span className="absolute inset-0 rounded-full bg-zinc-700 transition peer-checked:bg-emerald-600" />
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition peer-checked:translate-x-4" />
+              </span>
+            </label>
           </div>
         </div>
       </div>
@@ -404,15 +456,18 @@ export default function AgendaPage() {
                 )}
 
                 <div className="grid gap-2 md:grid-cols-3">
+                  {/* FECHA → formDate */}
                   <div>
                     <label className="text-xs text-zinc-400">Fecha</label>
                     <input
                       type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
                       className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 [color-scheme:dark]"
                     />
                   </div>
+
+                  {/* HORA → time */}
                   <div>
                     <label className="text-xs text-zinc-400">Hora *</label>
                     <input
@@ -422,12 +477,15 @@ export default function AgendaPage() {
                       className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 [color-scheme:dark]"
                     />
                   </div>
+
+                  {/* DURACIÓN */}
                   <div>
                     <label className="text-xs text-zinc-400">
                       Duración (min)
                     </label>
                     <input
                       type="number"
+                      min={1}
                       value={durationMin}
                       onChange={(e) => setDurationMin(Number(e.target.value))}
                       className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200"

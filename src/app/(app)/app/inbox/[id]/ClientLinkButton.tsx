@@ -5,14 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 type Client = { id: string; name: string | null; phone: string };
 type Props = {
   conversationId: string;
-  contactPhone: string;
+  channel: string;
+  contactKey: string;
+  contactDisplay?: string | null;
   initialClient: Client | null;
-  onDone?: () => void; // opcional: para router.refresh si quieres
+  onDone?: () => void;
 };
 
 export default function ClientLinkButton({
   conversationId,
-  contactPhone,
+  channel,
+  contactKey,
+  contactDisplay,
   initialClient,
   onDone,
 }: Props) {
@@ -23,11 +27,18 @@ export default function ClientLinkButton({
   const [err, setErr] = useState<string | null>(null);
 
   const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState(contactPhone);
+  const [newPhone, setNewPhone] = useState(
+    channel === "whatsapp" ? contactKey : ""
+  );
 
   const displayInitialName = useMemo(() => {
     if (!initialClient) return null;
-    return initialClient.name?.trim() || initialClient.phone || "Cliente";
+    return (
+      initialClient.name?.trim() ||
+      initialClient.phone ||
+      contactDisplay ||
+      "Cliente"
+    );
   }, [initialClient]);
 
   const title = initialClient
@@ -101,8 +112,8 @@ export default function ClientLinkButton({
     const name = newName.trim();
     const phone = newPhone.trim();
 
-    if (!phone) {
-      setErr("Teléfono requerido");
+    if (!name && !phone) {
+      setErr("Nombre o teléfono requerido");
       return;
     }
 
@@ -190,7 +201,7 @@ export default function ClientLinkButton({
                     </span>
                   </div>
                   <div className="text-xs text-white/60 mt-1">
-                    {initialClient.phone}
+                    {initialClient.phone || contactDisplay || "—"}
                   </div>
 
                   <div className="mt-3 flex gap-2">
@@ -292,7 +303,11 @@ export default function ClientLinkButton({
                       if (err) setErr(null);
                     }}
                     className="rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/20"
-                    placeholder="Teléfono *"
+                    placeholder={
+                      channel === "whatsapp"
+                        ? "Teléfono (WhatsApp)"
+                        : "Teléfono (opcional)"
+                    }
                   />
                 </div>
 

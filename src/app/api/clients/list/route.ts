@@ -1,39 +1,68 @@
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireBusinessId } from "@/lib/auth";
-import ClientsShell from "./_components/ClientsShell";
 
 const TAKE = 50;
 
-export default async function ClientsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; segment?: string }>;
-}) {
-  const businessId = await requireBusinessId();
-  const { q = "", segment = "all" } = await searchParams;
+export async function GET(req: NextRequest) {
+  let businessId: string;
+  try {
+    businessId = await requireBusinessId();
+  } catch {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+  }
 
-  const query = q.trim();
+  const { searchParams } = new URL(req.url);
+  const q = (searchParams.get("q") ?? "").trim();
+
+  const segment = (searchParams.get("segment") ?? "all").trim();
+
+  const now = Date.now();
+  const created7dCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const inactive30dCutoff = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+  const segmentWhere =
+    segment === "created7d"
+      ? { createdAt: { gte: created7dCutoff } }
+      : segment === "inactive30d"
+      ? {
+          OR: [
+            { conversations: { none: {} } },
+            { conversations: { some: { lastMessageAt: null } } },
+            {
+              conversations: {
+                some: { lastMessageAt: { lt: inactive30dCutoff } },
+              },
+            },
+          ],
+        }
+      : {};
 
   const clients = await prisma.client.findMany({
     where: {
       businessId,
-      ...(query
+      ...segmentWhere,
+      ...(q
         ? {
             OR: [
-              { name: { contains: query, mode: "insensitive" } },
-              { phone: { contains: query } },
+              { name: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q } },
             ],
           }
         : {}),
     },
+
     orderBy: { updatedAt: "desc" },
     take: TAKE,
     select: {
       id: true,
       name: true,
       phone: true,
-      updatedAt: true,
       createdAt: true,
+      updatedAt: true,
       _count: { select: { appointments: true, conversations: true } },
       conversations: {
         orderBy: [{ lastMessageAt: "desc" }, { updatedAt: "desc" }],
@@ -73,12 +102,8 @@ export default async function ClientsPage({
     };
   });
 
-  return (
-    <ClientsShell
-      initialRows={rows}
-      initialQ={query}
-      initialSegment={segment}
-      total={rows.length}
-    />
+  return NextResponse.json(
+    { ok: true, rows },
+    { headers: { "Cache-Control": "no-store" } }
   );
 }

@@ -382,25 +382,23 @@ export default function MessagesList({
   }, [messages.length]);
 
   return (
-    <div className="relative h-full min-h-0">
-      {/* Scroll area */}
+    <div
+      className="relative h-full min-h-0 flex flex-col"
+      style={{ background: "var(--wa-panel)" }}
+    >
       <div
-        ref={wrapRef}
-        className="chatScroll h-full overflow-y-auto px-4 py-3"
+        className="shrink-0 px-4 pt-3 pb-3"
         style={{ background: "var(--wa-panel)" }}
       >
-        <div
-          className="sticky top-0 z-10 pt-2 pb-2"
-          style={{ background: "transparent" }}
-        >
-          <AppointmentCard
-            conversationId={conversationId}
-            nextAppt={nextAppt}
-          />
-        </div>
+        <AppointmentCard conversationId={conversationId} nextAppt={nextAppt} />
+      </div>
 
-        <div className="h-4" />
-
+      {/* ✅ Scroll area SOLO mensajes */}
+      <div
+        ref={wrapRef}
+        className="chatScroll flex-1 min-h-0 overflow-y-auto px-4 py-3"
+        style={{ background: "var(--wa-panel)" }}
+      >
         <div className="space-y-2">
           {messages.map((m, idx) => {
             const outbound = m.direction === "OUTBOUND";
@@ -419,8 +417,6 @@ export default function MessagesList({
             const text = (m.text ?? "").trim();
             const hasText = text.length > 0;
 
-            // ✅ burbujas fantasma: si no hay contenido, no renders bubble
-            // pero dejamos pasar "template" y "failed" para mostrar avisos
             if (!hasText && !usedTemplate && !failed) {
               return (
                 <div key={m.id}>
@@ -448,11 +444,11 @@ export default function MessagesList({
 
             const bubbleClass = outbound
               ? failed
-                ? "ml-auto bg-red-600/90 text-white"
+                ? "bg-red-600/90 text-white"
                 : usedTemplate
-                ? "ml-auto bg-yellow-400 text-black"
-                : "ml-auto text-[#e9edef]"
-              : "mr-auto text-[#e9edef]";
+                ? "bg-yellow-400 text-black"
+                : "text-[#e9edef]"
+              : "text-[#e9edef]";
 
             const bubbleStyle = outbound
               ? failed || usedTemplate
@@ -480,51 +476,63 @@ export default function MessagesList({
                 )}
 
                 <div
-                  className={`max-w-[72%] rounded-xl px-3 py-2 text-[13px] leading-5 shadow-sm wrap-break-word whitespace-pre-wrap ${bubbleClass}`}
-                  style={bubbleStyle}
+                  className={
+                    outbound ? "flex justify-end" : "flex justify-start"
+                  }
                 >
-                  {/* Texto */}
-                  {hasText ? (
-                    <div className="whitespace-pre-wrap">{text}</div>
-                  ) : null}
+                  <div
+                    className={[
+                      "relative inline-flex w-fit max-w-[60%] flex-col",
+                      "rounded-2xl px-3 pt-2 pb-5",
+                      "pr-14",
+                      "text-[13px] leading-[18px] shadow-sm",
+                      "whitespace-pre-wrap break-words",
+                      "min-w-[84px]",
+                      bubbleClass,
+                    ].join(" ")}
+                    style={bubbleStyle}
+                  >
+                    {/* Texto */}
+                    {hasText ? <div>{text}</div> : null}
 
-                  {/* footer WA: hora + ticks */}
-                  <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-white/60">
-                    <span suppressHydrationWarning>
-                      {mounted
-                        ? new Date(m.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : ""}
-                    </span>
-
-                    {outbound && (
-                      <span className="ml-0.5 translate-y-px">
-                        <TickSvg
-                          variant={
-                            failed
-                              ? "failed"
-                              : tickVariant(String(m.status ?? ""))
-                          }
-                        />
+                    {/* footer WA: hora + ticks */}
+                    <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[11px] text-white/60">
+                      <span suppressHydrationWarning>
+                        {mounted
+                          ? new Date(m.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
                       </span>
+
+                      {outbound && (
+                        <span className="ml-0.5 translate-y-px">
+                          <TickSvg
+                            variant={
+                              failed
+                                ? "failed"
+                                : tickVariant(String(m.status ?? ""))
+                            }
+                          />
+                        </span>
+                      )}
+                    </div>
+
+                    {usedTemplate && !failed && (
+                      <div className="mt-2 rounded-lg bg-black/10 px-2 py-1 text-[11px] opacity-90 whitespace-pre-wrap break-words">
+                        Se envió plantilla para abrir conversación (no se envió
+                        tu texto)
+                      </div>
+                    )}
+
+                    {failed && (
+                      <div className="mt-2 max-w-[260px] rounded-lg bg-black/25 px-2 py-1 text-[11px] text-white/85 break-words">
+                        <span className="font-semibold">No enviado.</span>{" "}
+                        {String(m?.payload?.sendError ?? "Error al enviar.")}
+                      </div>
                     )}
                   </div>
-
-                  {usedTemplate && !failed && (
-                    <div className="mt-2 rounded-lg bg-black/10 px-2 py-1 text-[11px] opacity-90 wrap-break-word whitespace-pre-wrap">
-                      Se envió plantilla para abrir conversación (no se envió tu
-                      texto)
-                    </div>
-                  )}
-
-                  {failed && (
-                    <div className="mt-2 rounded-lg bg-black/20 px-2 py-1 text-[11px] text-white/85 wrap-break-word whitespace-pre-wrap">
-                      <span className="font-semibold">No enviado.</span>{" "}
-                      {String(m?.payload?.sendError ?? "Error al enviar.")}
-                    </div>
-                  )}
                 </div>
               </div>
             );

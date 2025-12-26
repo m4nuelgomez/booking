@@ -1,4 +1,3 @@
-// src/lib/phone.ts
 export function normalizePhone(input: string) {
   if (!input) return "";
 
@@ -31,7 +30,16 @@ export function normalizePhone(input: string) {
 export function formatPhoneForDisplay(normalized: string) {
   const s = String(normalized ?? "").trim();
   if (!s) return "";
-  if (s.startsWith("+")) return s;
-  const digits = s.replace(/[^\d]/g, "");
-  return digits ? `+${digits}` : "";
+
+  let digits = s.replace(/\D/g, "");
+
+  if (digits.startsWith("52") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  return s;
 }

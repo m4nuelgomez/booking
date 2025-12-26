@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
         { status: auth.status }
       );
     }
+
     const businessId = auth.businessId;
 
     const body = await req.json().catch(() => ({}));
@@ -38,25 +39,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const contactPhone = normalizePhone(client.phone);
-    if (!contactPhone) {
+    const contactKey = normalizePhone(client.phone);
+    if (!contactKey) {
       return NextResponse.json(
         { ok: false, error: "Client has no valid phone" },
         { status: 400 }
       );
     }
 
-    // 1) Asegura conversación por phone (único por businessId)
+    const channel = "whatsapp";
+
     const convo = await prisma.conversation.upsert({
-      where: { businessId_contactPhone: { businessId, contactPhone } },
+      where: {
+        businessId_channel_contactKey: {
+          businessId,
+          channel,
+          contactKey,
+        },
+      },
       create: {
         businessId,
-        contactPhone,
+        channel,
+        contactKey,
         clientId: client.id,
         lastMessageAt: new Date(),
       },
       update: {
-        // 2) Si existe, garantiza vínculo al cliente (y refresca actividad)
         clientId: client.id,
         lastMessageAt: new Date(),
       },

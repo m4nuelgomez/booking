@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
   const businessId = auth.businessId;
 
   const body = await req.json().catch(() => ({}));
-
   const phoneNumberId = String(body?.phoneNumberId ?? "").trim();
   const wabaId = body?.wabaId ? String(body.wabaId).trim() : null;
   const displayNumber = body?.displayNumber
@@ -33,8 +32,13 @@ export async function POST(req: NextRequest) {
     update: {},
   });
 
-  const existing = await prisma.whatsAppAccount.findUnique({
-    where: { phoneNumberId },
+  const existing = await prisma.channelAccount.findUnique({
+    where: {
+      channel_providerAccountId: {
+        channel: "whatsapp",
+        providerAccountId: phoneNumberId,
+      },
+    },
     select: { id: true, businessId: true },
   });
 
@@ -49,25 +53,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const account = await prisma.whatsAppAccount.upsert({
-    where: { phoneNumberId },
+  const account = await prisma.channelAccount.upsert({
+    where: {
+      channel_providerAccountId: {
+        channel: "whatsapp",
+        providerAccountId: phoneNumberId,
+      },
+    },
     create: {
       businessId,
-      phoneNumberId,
-      wabaId,
+      channel: "whatsapp",
+      providerAccountId: phoneNumberId,
       displayNumber,
+      config: { wabaId, provider: "meta" },
     },
     update: {
       businessId,
-      wabaId,
       displayNumber,
+      config: { wabaId, provider: "meta" },
     },
     select: {
       id: true,
-      phoneNumberId: true,
       businessId: true,
+      channel: true,
+      providerAccountId: true,
       displayNumber: true,
-      wabaId: true,
+      config: true,
     },
   });
 

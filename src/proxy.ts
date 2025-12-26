@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 const COOKIE_NAME = "booking_gate";
 const BIZ_COOKIE = "booking_bid";
 
-export default function middleware(req: NextRequest) {
+export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/api")) return NextResponse.next();
+  if (pathname.startsWith("/api") || pathname.startsWith("/auth/api")) {
+    return NextResponse.next();
+  }
 
   if (
     pathname === "/login" ||

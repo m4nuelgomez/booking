@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     // ✅ Validar conversación por tenant
     const convo = await prisma.conversation.findFirst({
       where: { id: conversationId, businessId },
-      select: { id: true, contactPhone: true },
+      select: { id: true, channel: true, contactKey: true },
     });
 
     if (!convo) {
@@ -75,14 +75,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!convo.contactPhone) {
+    if (convo.channel !== "whatsapp") {
       return NextResponse.json(
-        { ok: false, error: "Conversation has no contactPhone" },
+        { ok: false, error: "Channel not supported yet" },
         { status: 400 }
       );
     }
 
-    const toPhone = normalizePhone(convo.contactPhone);
+    const toPhone = normalizePhone(convo.contactKey);
     const waTo = toWhatsAppRecipient(toPhone);
 
     const fromPhone = process.env.WHATSAPP_BUSINESS_NUMBER
@@ -94,9 +94,12 @@ export async function POST(req: NextRequest) {
         data: {
           businessId,
           conversationId,
-          provider: "whatsapp",
-          toPhone,
-          text,
+          channel: "whatsapp",
+          contactKey: toPhone,
+          payload: {
+            type: "text",
+            text: { body: text },
+          },
           status: "PENDING",
           attemptCount: 0,
           nextAttemptAt: new Date(),

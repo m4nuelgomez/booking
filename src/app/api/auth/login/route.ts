@@ -1,8 +1,7 @@
-// src/app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const COOKIE_NAME = "booking_gate";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 14; // 14 días
+const MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json().catch(() => ({ password: "" }));
@@ -24,7 +23,6 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ ok: true });
 
-  // cookie httpOnly = no accesible desde JS
   res.cookies.set({
     name: COOKIE_NAME,
     value: "1",

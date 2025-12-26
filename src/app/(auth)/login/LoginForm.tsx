@@ -3,10 +3,26 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+function normalizeNext(next: string | null) {
+  if (!next) return "/app/inbox";
+
+  // Solo permitimos rutas internas
+  if (!next.startsWith("/")) return "/app/inbox";
+
+  // Fix legacy: /inbox -> /app/inbox
+  if (next === "/inbox" || next.startsWith("/inbox/")) {
+    return next.replace("/inbox", "/app/inbox");
+  }
+
+  // Si por alguna razón llega "/app" o "/admin" es válido
+  return next;
+}
+
 export default function LoginForm() {
   const router = useRouter();
   const sp = useSearchParams();
-  const next = sp.get("next") || "/inbox";
+
+  const next = normalizeNext(sp.get("next"));
 
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,7 +45,7 @@ export default function LoginForm() {
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }
 
-      router.replace(next.startsWith("/") ? next : "/app/inbox");
+      router.replace(next);
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? "Login failed");

@@ -19,9 +19,11 @@ export default async function ConversationPage({
     where: { id },
     select: {
       id: true,
-      contactPhone: true,
       businessId: true,
-      client: { select: { id: true, name: true, phone: true } }, // ✅
+      channel: true,
+      contactKey: true,
+      contactDisplay: true,
+      client: { select: { id: true, name: true, phone: true } },
     },
   });
 
@@ -32,10 +34,10 @@ export default async function ConversationPage({
   }
 
   const displayName =
-    convo.client?.name?.trim() || convo.client?.phone || convo.contactPhone;
+    convo.client?.name?.trim() || convo.contactDisplay || convo.contactKey;
 
   const avatarText = (
-    displayName?.trim()?.[0] ?? convo.contactPhone.slice(-2)
+    displayName?.trim()?.[0] ?? convo.contactKey.slice(-2)
   ).toUpperCase();
 
   const messages = await prisma.message.findMany({
@@ -92,30 +94,31 @@ export default async function ConversationPage({
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
-      <div className="wa-topbar relative z-200 px-4 py-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-white/10 border border-white/10 grid place-items-center text-white font-extrabold">
+      <div className="wa-topbar relative z-200 h-20 px-5 flex items-center gap-4 border-b border-white/10">
+        {/* Avatar */}
+        <div className="h-11 w-11 rounded-full bg-white/10 border border-white/10 grid place-items-center text-white font-bold text-base">
           {avatarText}
         </div>
 
-        <div className="min-w-0">
-          <div className="text-[14px] font-extrabold text-white truncate">
+        {/* Name + phone */}
+        <div className="min-w-0 leading-tight">
+          <div className="text-[16px] font-semibold text-white truncate">
             {displayName}
           </div>
-          <div
-            className="text-[12px] leading-tight truncate"
-            style={{ color: "var(--wa-sub)" }}
-          >
-            {convo.contactPhone}
+          <div className="text-[13px] text-white/60 truncate">
+            {convo.contactDisplay || convo.contactKey}
           </div>
         </div>
 
+        {/* Actions */}
         <div className="ml-auto flex items-center gap-2">
           <ClientLinkButton
             conversationId={convo.id}
-            contactPhone={convo.contactPhone}
+            channel={convo.channel}
+            contactKey={convo.contactKey}
+            contactDisplay={convo.contactDisplay}
             initialClient={convo.client ?? null}
           />
-
           <TopbarMenu
             dashboardHref="/app/dashboard"
             logoutEndpoint="/api/auth/logout"
@@ -133,8 +136,8 @@ export default async function ConversationPage({
         </div>
       </div>
 
-      <div className="wa-composer px-3 py-3">
-        <SendBox conversationId={convo.id} toPhone={convo.contactPhone} />
+      <div className="wa-composer">
+        <SendBox conversationId={convo.id} />
       </div>
 
       <ScheduleModalShell conversationId={convo.id} />

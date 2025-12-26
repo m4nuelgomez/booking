@@ -60,14 +60,18 @@ export default async function DashboardPage() {
 
     prisma.conversation.findMany({
       where: { businessId },
-      orderBy: { lastMessageAt: "desc" },
+      orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
       take: 5,
       select: {
         id: true,
-        contactPhone: true,
+        channel: true,
+        contactKey: true,
+        contactDisplay: true,
         lastMessageAt: true,
         unreadCount: true,
-        client: { select: { id: true, name: true, phone: true } },
+        client: {
+          select: { id: true, name: true, phone: true },
+        },
         messages: {
           take: 1,
           orderBy: { createdAt: "desc" },
@@ -219,7 +223,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="divide-y divide-zinc-800">
             {recentConvos.map((c) => {
-              const who = c.client?.name ?? c.contactPhone;
+              const who = c.client?.name ?? c.contactDisplay ?? c.contactKey;
               const last = c.messages[0]?.text ?? "";
               const you = c.messages[0]?.direction === "OUTBOUND";
               const when = c.lastMessageAt

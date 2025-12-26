@@ -1,3 +1,4 @@
+// src/app/api/conversations/ensure/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         conversationId: true,
-        client: { select: { id: true, phone: true } },
+        client: { select: { id: true, phone: true, name: true } },
       },
     });
 
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ✅ ya estaba linkeada
     if (appt.conversationId) {
       return NextResponse.json({
         ok: true,
@@ -49,50 +51,46 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const clientId = appt.client?.id ?? null;
     const phoneRaw = appt.client?.phone ?? "";
-    const contactPhone = normalizePhone(phoneRaw);
+    const contactKey = normalizePhone(phoneRaw);
 
-    if (!clientId || !contactPhone) {
+    if (!contactKey) {
       return NextResponse.json(
-        { ok: false, error: "Appointment has no client phone" },
+        { ok: false, error: "Appointment client has no valid phone" },
         { status: 400 }
       );
     }
 
-    // tolerancia a conversaciones viejas con +521...
-    const alt521 = contactPhone.startsWith("+52")
-      ? `+521${contactPhone.slice(3)}`
-      : null;
+    // Por ahora Agenda siempre abre WhatsApp. A futuro, esto saldrá del Appointment/Client.
+    const channel = "whatsapp";
+    const contactDisplay = appt.client?.name?.trim() || contactKey;
 
-    const existing = await prisma.conversation.findFirst({
+    const convo = await prisma.conversation.upsert({
       where: {
+        businessId_channel_contactKey: { businessId, channel, contactKey },
+      },
+      create: {
         businessId,
-        OR: [{ contactPhone }, ...(alt521 ? [{ contactPhone: alt521 }] : [])],
+        channel,
+        contactKey,
+        contactDisplay,
+        clientId: appt.client?.id ?? null,
+        lastMessageAt: new Date(),
+      },
+      update: {
+        // si el cliente existe, garantizamos vínculo
+        clientId: appt.client?.id ?? undefined,
+        lastMessageAt: new Date(),
       },
       select: { id: true },
     });
 
-    const convoId = existing
-      ? existing.id
-      : (
-          await prisma.conversation.create({
-            data: {
-              businessId,
-              contactPhone,
-              clientId,
-              lastMessageAt: new Date(),
-            },
-            select: { id: true },
-          })
-        ).id;
-
     await prisma.appointment.update({
       where: { id: appt.id },
-      data: { conversationId: convoId },
+      data: { conversationId: convo.id },
     });
 
-    return NextResponse.json({ ok: true, conversationId: convoId });
+    return NextResponse.json({ ok: true, conversationId: convo.id });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "Unknown error" },

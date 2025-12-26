@@ -13,18 +13,28 @@ export async function GET(req: NextRequest) {
 
   const businessId = auth.businessId;
 
-  const accounts = await prisma.whatsAppAccount.findMany({
-    where: { businessId },
+  const accounts = await prisma.channelAccount.findMany({
+    where: { businessId, channel: "whatsapp" },
     select: {
       id: true,
-      phoneNumberId: true,
+      providerAccountId: true, // phoneNumberId
       displayNumber: true,
-      wabaId: true,
+      displayName: true,
+      config: true,
       createdAt: true,
       updatedAt: true,
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ ok: true, accounts });
+  const mapped = accounts.map((a) => ({
+    id: a.id,
+    phoneNumberId: a.providerAccountId,
+    displayNumber: a.displayNumber,
+    wabaId: (a.config as any)?.wabaId ?? null,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+  }));
+
+  return NextResponse.json({ ok: true, accounts: mapped });
 }

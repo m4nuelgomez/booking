@@ -131,22 +131,14 @@ export function AppointmentCard({ it, loading = false }: Props) {
     setLoadingChat(true);
     setErr(null);
 
-    try {
-      const res = await fetch("/api/conversations/ensure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentId: it.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok)
-        throw new Error(data?.error ?? `HTTP ${res.status}`);
-
-      router.push(`/app/inbox/${data.conversationId}`);
-    } catch (e: any) {
-      setErr(e?.message ?? "Error");
-    } finally {
+    if (it.conversationId) {
+      router.push(`/app/inbox/${it.conversationId}`);
       setLoadingChat(false);
+      return;
     }
+
+    setErr("Esta cita no tiene un chat asociado todavía.");
+    setLoadingChat(false);
   }
 
   return (

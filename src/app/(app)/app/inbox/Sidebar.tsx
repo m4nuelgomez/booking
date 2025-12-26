@@ -6,11 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 
 type SidebarItem = {
   id: string;
-  contactPhone: string;
+  channel: string;
+  contactKey: string;
   displayName: string;
   lastAt: string;
   lastText: string;
-  lastDirection: "INBOUND" | "OUTBOUND" | null | string;
+  lastDirection: "INBOUND" | "OUTBOUND" | null;
   unreadCount: number;
 };
 
@@ -27,60 +28,16 @@ function formatTime(iso: string) {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  return d.toLocaleDateString([], { day: "2-digit", month: "2-digit" });
+  return d.toLocaleDateString([], { day: "2-digit", month: "short" });
 }
 
-function IconNewChat() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 7v10M7 12h10"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M21 12a9 9 0 1 1-9-9"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        opacity="0.55"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function IconMenu() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M6.5 12h11M6.5 7h11M6.5 17h11"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function IconSearch() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        opacity="0.85"
-      />
-      <path
-        d="M16.5 16.5 21 21"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        opacity="0.85"
-      />
-    </svg>
-  );
+function initials(displayName: string, contactKey: string) {
+  const name = (displayName ?? "").trim();
+  if (name) {
+    const parts = name.split(/\s+/).slice(0, 2);
+    return parts.map((p) => p[0]?.toUpperCase()).join("");
+  }
+  return contactKey.slice(-2).toUpperCase();
 }
 
 export default function Sidebar({
@@ -116,6 +73,7 @@ export default function Sidebar({
     });
   }, [items]);
 
+  // refresca lista (tu comportamiento actual)
   useEffect(() => {
     if (!pathname?.startsWith("/app/inbox")) return;
 
@@ -128,9 +86,9 @@ export default function Sidebar({
     return () => clearInterval(t);
   }, [router, pathname]);
 
+  // marca como leído cuando el chat dispara evento
   useEffect(() => {
     const handler = (ev: any) => {
-      console.log("SIDEBAR booking:read", ev?.detail);
       const id = ev?.detail?.conversationId;
       if (!id) return;
 
@@ -143,6 +101,7 @@ export default function Sidebar({
     return () => window.removeEventListener("booking:read", handler as any);
   }, [router]);
 
+  // scroll al activo
   useEffect(() => {
     if (!effectiveActiveId) return;
     const el = document.getElementById(`convo-${effectiveActiveId}`);
@@ -156,63 +115,79 @@ export default function Sidebar({
     if (!s) return items;
     return items.filter((c) => {
       const a = (c.displayName ?? "").toLowerCase();
-      const b = c.contactPhone.toLowerCase();
+      const b = c.contactKey.toLowerCase();
       const d = (c.lastText ?? "").toLowerCase();
       return a.includes(s) || b.includes(s) || d.includes(s);
     });
   }, [items, q]);
 
   return (
-    <div className="h-full flex flex-col bg-[#111b21] text-white">
-      {/* Header (WhatsApp style) */}
-      <div className="h-15 px-3 flex items-center justify-between bg-[#202c33] border-b border-white/5">
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Avatar placeholder */}
-          <div className="w-10 h-10 rounded-full bg-white/10 border border-white/10 grid place-items-center font-black">
+    <div className="h-full flex flex-col bg-neutral-950 text-white">
+      {/* Header (respond.io-ish) */}
+      <div className="h-14 px-4 flex items-center justify-between border-b border-white/10 bg-neutral-950">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-9 w-9 rounded-full bg-white/10 border border-white/10 grid place-items-center font-bold text-sm">
             N
           </div>
-          <div className="font-semibold text-[15px] truncate">Chats</div>
+          <div className="font-semibold truncate">Chats</div>
         </div>
 
-        <div className="flex items-center gap-1 text-white/80">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            className="w-10 h-10 grid place-items-center rounded-full hover:bg-white/10 active:bg-white/15 transition"
-            aria-label="New chat"
+            className="h-9 w-9 rounded-lg border border-white/10 hover:bg-white/10 transition"
             title="New chat"
+            aria-label="New chat"
           >
-            <IconNewChat />
+            +
           </button>
           <button
             type="button"
-            className="w-10 h-10 grid place-items-center rounded-full hover:bg-white/10 active:bg-white/15 transition"
-            aria-label="Menu"
+            className="h-9 w-9 rounded-lg border border-white/10 hover:bg-white/10 transition"
             title="Menu"
+            aria-label="Menu"
           >
-            <IconMenu />
+            ⋯
           </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2 bg-[#111b21] border-b border-white/5">
-        <div className="h-9 rounded-lg bg-[#202c33] border border-white/5 flex items-center gap-2 px-3">
-          <div className="text-white/70">
-            <IconSearch />
-          </div>
+      <div className="px-3 py-3 border-b border-white/10">
+        <div className="h-9 rounded-lg border border-white/10 bg-white/5 flex items-center gap-2 px-3">
+          <span className="text-white/50">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                opacity="0.85"
+              />
+              <path
+                d="M16.5 16.5 21 21"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                opacity="0.85"
+              />
+            </svg>
+          </span>
+
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar un chat o iniciar uno nuevo"
-            className="w-full bg-transparent outline-none text-[13px] placeholder:text-white/45"
+            placeholder="Search by name, contact..."
+            className="w-full bg-transparent outline-none text-sm text-white placeholder:text-white/40"
           />
         </div>
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto chatScroll">
+      <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="p-4 text-white/60 text-sm">No conversations yet.</div>
+          <div className="p-4 text-neutral-500 text-sm">
+            No conversations yet.
+          </div>
         ) : (
           <ul className="m-0 p-0 list-none">
             {filtered.map((c) => {
@@ -221,7 +196,7 @@ export default function Sidebar({
               const preview = c.lastText ? c.lastText : "";
               const prefix =
                 c.lastDirection === "OUTBOUND"
-                  ? "Tú: "
+                  ? "You: "
                   : c.lastDirection === "INBOUND"
                   ? ""
                   : "";
@@ -235,30 +210,28 @@ export default function Sidebar({
                   <Link
                     href={`/app/inbox/${c.id}`}
                     className={[
-                      "block no-underline text-inherit",
-                      "px-3 py-2.5",
+                      "block",
+                      "px-3 py-3",
                       "border-b border-white/5",
                       "transition",
-                      isActive ? "bg-[#2a3942]" : "hover:bg-[#202c33]",
+                      isActive ? "bg-white/10" : "hover:bg-white/5",
                     ].join(" ")}
                   >
                     <div className="flex gap-3 items-center">
                       {/* Avatar */}
-                      <div className="w-12 h-12 rounded-full bg-white/10 border border-white/10 grid place-items-center font-black text-sm flex-none">
-                        {(
-                          c.displayName?.trim()?.[0] ?? c.contactPhone.slice(-2)
-                        ).toUpperCase()}
+                      <div className="w-10 h-10 rounded-full bg-white/10 border border-white/10 grid place-items-center font-bold text-xs flex-none text-white/90">
+                        {initials(c.displayName, c.contactKey)}
                       </div>
 
                       <div className="min-w-0 flex-1">
                         {/* Row 1: name + time */}
                         <div className="flex items-center gap-2">
-                          <div className="font-semibold text-[15px] truncate">
-                            {c.displayName || c.contactPhone}
+                          <div className="font-semibold text-sm truncate">
+                            {c.displayName || c.contactKey}
                           </div>
 
                           <div className="ml-auto flex items-center gap-2 flex-none">
-                            <div className="text-[12px] text-white/55">
+                            <div className="text-xs text-white/45">
                               {mounted ? formatTime(c.lastAt) : ""}
                             </div>
                           </div>
@@ -267,23 +240,24 @@ export default function Sidebar({
                         {/* Row 2: preview + badge */}
                         <div className="mt-0.5 flex items-center gap-2">
                           <div
-                            className={`min-w-0 flex-1 text-[13px] truncate ${
+                            className={[
+                              "min-w-0 flex-1 text-sm truncate",
                               showUnread
-                                ? "text-white/85 font-semibold"
-                                : "text-white/55"
-                            }`}
+                                ? "text-white/90 font-semibold"
+                                : "text-white/55",
+                            ].join(" ")}
                           >
-                            {prefix && (
+                            {prefix ? (
                               <span className="text-white/45">{prefix}</span>
-                            )}
+                            ) : null}
                             {preview || (
-                              <span className="text-white/35"> </span>
+                              <span className="text-white/30">—</span>
                             )}
                           </div>
 
                           {showUnread && (
                             <div
-                              className="min-w-5 h-5 px-1.75 rounded-full bg-[#00a884] text-[#111b21] text-[12px] font-extrabold grid place-items-center flex-none"
+                              className="min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-neutral-900 text-[11px] font-extrabold grid place-items-center flex-none"
                               aria-label={`Unread ${effectiveUnread}`}
                               title={`${effectiveUnread} unread`}
                             >

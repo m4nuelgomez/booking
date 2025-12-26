@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-export async function POST() {
-  const res = NextResponse.json({ ok: true });
+export async function POST(req: Request) {
+  const url = new URL(req.url);
+  const res = NextResponse.redirect(new URL("/login", url.origin));
 
   res.cookies.set("booking_gate", "", {
     httpOnly: true,

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import DashboardAutoRefresh from "./DashboardAutoRefresh";
+import { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -29,26 +30,47 @@ type Row = {
   id: string;
   name: string;
   status: "🟢" | "🟡" | "🔴";
-  msgsTotal: number;
+  msgsTotal: number; // v1: usamos conversations como proxy de actividad
   clientsTotal: number;
-  outboxTotal: number;
-  webhookTotal: number;
+  outboxTotal: number; // v1: 0 (no hay count en Business)
+  webhookTotal: number; // v1: 0 (no hay count en Business)
   waLinked: boolean;
   createdAt: Date;
 };
 
-type BusinessRow = {
-  id: string;
-  name: string;
-  createdAt: Date;
-  waAccounts: { id: string }[];
+/* =========================
+   Prisma-typed select
+========================= */
+
+const businessRowSelect = Prisma.validator<Prisma.BusinessSelect>()({
+  id: true,
+  name: true,
+  createdAt: true,
+  updatedAt: true,
   _count: {
-    messages: number;
-    clients: number;
-    outbox: number;
-    webhookEvents: number;
-  };
-};
+    select: {
+      conversations: true,
+      clients: true,
+      appointments: true,
+    },
+  },
+  channelAccounts: {
+    where: { channel: "whatsapp" },
+    select: {
+      id: true,
+      channel: true,
+      createdAt: true,
+      displayName: true,
+      displayNumber: true,
+    },
+    take: 3,
+    orderBy: { createdAt: "desc" },
+  },
+});
+
+type BusinessRow = Prisma.BusinessGetPayload<{
+  select: typeof businessRowSelect;
+}>;
 
 /* =========================
    PAGE
@@ -102,23 +124,10 @@ export default async function AdminDashboardPage() {
 
   /* -------- Negocios (query tipada, SIN Promise.all) -------- */
 
-  const topBusinesses: BusinessRow[] = await prisma.business.findMany({
+  const topBusinesses = await prisma.business.findMany({
     orderBy: { createdAt: "desc" },
     take: 25,
-    select: {
-      id: true,
-      name: true,
-      createdAt: true,
-      waAccounts: { select: { id: true } },
-      _count: {
-        select: {
-          messages: true,
-          clients: true,
-          outbox: true,
-          webhookEvents: true,
-        },
-      },
-    },
+    select: businessRowSelect,
   });
 
   /* -------- Derived values -------- */
@@ -133,19 +142,22 @@ export default async function AdminDashboardPage() {
   /* -------- Rows (100% typed) -------- */
 
   const rows: Row[] = topBusinesses.map((b: BusinessRow) => {
-    const msgs = b._count.messages;
+    const convos = b._count.conversations;
     const clients = b._count.clients;
-    const outbox = b._count.outbox;
-    const webhook = b._count.webhookEvents;
-    const waLinked = b.waAccounts.length > 0;
 
-    const status: Row["status"] = msgs > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
+    // v1: outbox/webhook por negocio no están en Business._count
+    const outbox = 0;
+    const webhook = 0;
+
+    const waLinked = b.channelAccounts.length > 0;
+
+    const status: Row["status"] = convos > 0 ? "🟢" : clients > 0 ? "🟡" : "🔴";
 
     return {
       id: b.id,
       name: b.name,
       status,
-      msgsTotal: msgs,
+      msgsTotal: convos,
       clientsTotal: clients,
       outboxTotal: outbox,
       webhookTotal: webhook,
@@ -232,7 +244,7 @@ export default async function AdminDashboardPage() {
               <tr className="border-b border-zinc-800">
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Negocio</th>
-                <th className="px-4 py-3">Mensajes</th>
+                <th className="px-4 py-3">Chats</th>
                 <th className="px-4 py-3">Clientes</th>
                 <th className="px-4 py-3">Outbox</th>
                 <th className="px-4 py-3">Webhooks</th>
@@ -270,8 +282,11 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="text-xs text-zinc-500">
-        Nota: v1 usa conteos totales por negocio. En v2 agregamos métricas 24h
-        por negocio con groupBy.
+        Nota: v1 usa “Chats” (conversations) como proxy. En v2 agregamos
+        métricas 24h por negocio (mensajes/outbox/webhooks) con groupBy.
+        <span className="ml-2 text-zinc-600">
+          MRR potencial: ${potentialMRR.toLocaleString("es-MX")} MXN
+        </span>
       </div>
     </div>
   );

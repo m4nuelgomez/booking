@@ -7,6 +7,23 @@ import { requireBusinessId } from "@/lib/auth";
 import ClientLinkButton from "./ClientLinkButton";
 import { formatPhoneForDisplay } from "@/lib/phone";
 
+function labelCanal(channel: string) {
+  switch (channel) {
+    case "whatsapp":
+      return "WhatsApp";
+    case "instagram":
+      return "Instagram";
+    case "email":
+      return "Correo";
+    case "tiktok":
+      return "TikTok";
+    default:
+      return channel
+        ? channel.charAt(0).toUpperCase() + channel.slice(1)
+        : "Canal";
+  }
+}
+
 export default async function ConversationPage({
   params,
 }: {
@@ -30,16 +47,27 @@ export default async function ConversationPage({
 
   if (!convo) {
     return (
-      <div className="h-full p-6 text-white/80">Conversation not found.</div>
+      <div className="h-full p-6 text-white/80">
+        Conversación no encontrada.
+      </div>
     );
   }
 
   const displayName =
-    convo.client?.name?.trim() || convo.contactDisplay || convo.contactKey;
+    convo.client?.name?.trim() ||
+    convo.contactDisplay ||
+    convo.contactKey ||
+    "Cliente";
 
+  const safeKey = convo.contactKey || "";
   const avatarText = (
-    displayName?.trim()?.[0] ?? convo.contactKey.slice(-2)
+    displayName?.trim()?.[0] ?? (safeKey.length >= 2 ? safeKey.slice(-2) : "CL")
   ).toUpperCase();
+
+  const metaRight =
+    convo.channel === "whatsapp"
+      ? formatPhoneForDisplay(convo.contactKey)
+      : convo.contactDisplay || convo.contactKey || "";
 
   const messages = await prisma.message.findMany({
     where: { businessId, conversationId: id },
@@ -116,13 +144,17 @@ export default async function ConversationPage({
               </svg>
             ) : null}
 
-            <span className="truncate">{displayName || "Cliente"}</span>
+            <span className="truncate">{displayName}</span>
           </div>
 
           <div className="mt-1 truncate text-[12px] text-white/55">
-            <span className="capitalize">{convo.channel}</span>
-            <span className="mx-2 text-white/25">•</span>
-            {formatPhoneForDisplay(convo.contactKey)}
+            <span>{labelCanal(convo.channel)}</span>
+            {metaRight ? (
+              <>
+                <span className="mx-2 text-white/25">•</span>
+                <span className="truncate">{metaRight}</span>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -138,6 +170,8 @@ export default async function ConversationPage({
 
           <TopbarMenu
             dashboardHref="/app/dashboard"
+            clientsHref="/app/clients"
+            agendaHref="/app/agenda"
             logoutEndpoint="/api/auth/logout"
           />
         </div>

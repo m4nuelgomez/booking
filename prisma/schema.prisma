@@ -92,6 +92,8 @@ model Business {
   webhookEvents WebhookEvent[]
   outbox        OutboxMessage[]
 
+  onboardingTokens OnboardingToken[]
+
   clients      Client[]
   appointments Appointment[]
 
@@ -227,4 +229,16 @@ model ChannelAccount {
 
   @@unique([channel, providerAccountId], name: "channel_providerAccountId")
   @@index([businessId, channel])
+}
+
+model OnboardingToken {
+  id         String   @id @default(cuid())
+  businessId String
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
 }

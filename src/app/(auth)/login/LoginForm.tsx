@@ -6,15 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 function normalizeNext(next: string | null) {
   if (!next) return "/app/inbox";
 
-  // Solo permitimos rutas internas
   if (!next.startsWith("/")) return "/app/inbox";
 
-  // Fix legacy: /inbox -> /app/inbox
   if (next === "/inbox" || next.startsWith("/inbox/")) {
     return next.replace("/inbox", "/app/inbox");
   }
 
-  // Si por alguna razón llega "/app" o "/admin" es válido
   return next;
 }
 
@@ -37,31 +34,35 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, next }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error ?? `HTTP ${res.status}`);
+        throw new Error(data?.error ?? "La contraseña es incorrecta.");
       }
 
-      router.replace(next);
+      router.replace(data.redirectTo ?? next);
       router.refresh();
     } catch (err: any) {
-      setError(err?.message ?? "Login failed");
+      setError(err?.message ?? "No se pudo iniciar sesión");
       setLoading(false);
     }
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-3">
-      <label className="block text-sm text-zinc-300">Password</label>
+      <label className="block text-sm text-zinc-300">
+        Contraseña de acceso
+      </label>
+
       <input
         type="password"
         className="w-full rounded-xl bg-zinc-950 border border-white/10 px-3 py-2 outline-none focus:border-white/20"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         autoFocus
+        placeholder="Ingresa la contraseña"
       />
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
@@ -70,7 +71,7 @@ export default function LoginForm() {
         disabled={loading}
         className="w-full rounded-xl bg-white text-black px-3 py-2 font-medium disabled:opacity-60"
       >
-        {loading ? "Signing in..." : "Sign in"}
+        {loading ? "Ingresando..." : "Entrar"}
       </button>
     </form>
   );

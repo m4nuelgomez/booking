@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireBusinessIdFromReq } from "@/lib/auth-api";
+import { requireBusinessIdFromReq } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
 
 type Body = {
@@ -25,12 +25,16 @@ function startOfDay(d: Date) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
+
 function endOfDay(d: Date) {
   const x = new Date(d);
   x.setHours(23, 59, 59, 999);
   return x;
 }
 
+/* ================================
+   GET /api/appointments
+================================ */
 export async function GET(req: NextRequest) {
   const auth = requireBusinessIdFromReq(req);
   if (!auth.ok) return bad(auth.error, auth.status);
@@ -43,7 +47,9 @@ export async function GET(req: NextRequest) {
   if (!dateStr) return bad("date is required (YYYY-MM-DD)");
 
   const parsed = new Date(dateStr + "T00:00:00");
-  if (Number.isNaN(parsed.getTime())) return bad("date must be YYYY-MM-DD");
+  if (Number.isNaN(parsed.getTime())) {
+    return bad("date must be YYYY-MM-DD");
+  }
 
   const from = startOfDay(parsed);
   const to = endOfDay(parsed);
@@ -83,6 +89,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, items });
 }
 
+/* ================================
+   POST /api/appointments
+================================ */
 export async function POST(req: NextRequest) {
   const auth = requireBusinessIdFromReq(req);
   if (!auth.ok) return bad(auth.error, auth.status);
@@ -102,19 +111,20 @@ export async function POST(req: NextRequest) {
   let endsAt: Date | null = null;
   if (body?.endsAt) {
     endsAt = new Date(body.endsAt);
-    if (Number.isNaN(endsAt.getTime()))
+    if (Number.isNaN(endsAt.getTime())) {
       return bad("endsAt must be a valid ISO date");
+    }
   } else if (body?.durationMin) {
     const mins = Math.max(5, Number(body.durationMin));
     endsAt = new Date(startsAt.getTime() + mins * 60_000);
   }
 
-  if (endsAt && endsAt <= startsAt) return bad("endsAt must be after startsAt");
+  if (endsAt && endsAt <= startsAt) {
+    return bad("endsAt must be after startsAt");
+  }
 
   const name = body?.name?.trim() ? body.name.trim() : null;
-
   let phone = normalizePhone(String(body?.phone ?? ""));
-
   let convoClientId: string | null = null;
 
   if (!phone) {
@@ -152,11 +162,11 @@ export async function POST(req: NextRequest) {
       data: {
         businessId,
         clientId: client.id,
-        conversationId: body.conversationId ?? null,
+        conversationId,
         startsAt,
         endsAt,
-        service: body?.service?.trim() ? body.service.trim() : null,
-        notes: body?.notes?.trim() ? body.notes.trim() : null,
+        service: body?.service?.trim() || null,
+        notes: body?.notes?.trim() || null,
         status: "SCHEDULED",
       },
       select: { id: true },

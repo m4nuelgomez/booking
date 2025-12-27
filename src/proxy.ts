@@ -4,6 +4,12 @@ const COOKIE_GATE = "booking_gate";
 const COOKIE_BID = "booking_bid";
 const COOKIE_ADMIN = "booking_admin";
 
+function redirectTo(req: NextRequest, to: string) {
+  const url = req.nextUrl.clone();
+  url.pathname = to;
+  return NextResponse.redirect(url);
+}
+
 export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -15,6 +21,15 @@ export default function proxy(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
+
+  if (pathname === "/app/login") return redirectTo(req, "/login");
+
+  if (pathname === "/inbox") return redirectTo(req, "/app/inbox");
+  if (pathname === "/dashboard") return redirectTo(req, "/app/dashboard");
+  if (pathname === "/agenda") return redirectTo(req, "/app/agenda");
+  if (pathname === "/clients") return redirectTo(req, "/app/clients");
+
+  if (pathname === "/admin") return redirectTo(req, "/admin/global");
 
   if (pathname.startsWith("/api/admin/")) {
     const isAdmin = req.cookies.get(COOKIE_ADMIN)?.value === "1";
@@ -46,9 +61,7 @@ export default function proxy(req: NextRequest) {
   if (isAdminUi) {
     const isAdmin = req.cookies.get(COOKIE_ADMIN)?.value === "1";
     if (!isAdmin) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/app/dashboard";
-      return NextResponse.redirect(url);
+      return redirectTo(req, "/app/dashboard");
     }
   }
 

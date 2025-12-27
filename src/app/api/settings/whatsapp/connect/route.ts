@@ -87,10 +87,12 @@ export async function POST(req: NextRequest) {
       displayName: "WhatsApp",
       displayNumber,
       config,
+      isActive: true, // ✅ CLAVE
     },
     update: {
       displayNumber,
       config,
+      isActive: true, // ✅ CLAVE
     },
   });
 

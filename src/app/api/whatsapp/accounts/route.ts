@@ -17,10 +17,11 @@ export async function GET(req: NextRequest) {
     where: { businessId, channel: "whatsapp" },
     select: {
       id: true,
-      providerAccountId: true, // phoneNumberId
+      providerAccountId: true,
       displayNumber: true,
       displayName: true,
       config: true,
+      isActive: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     phoneNumberId: a.providerAccountId,
     displayNumber: a.displayNumber,
     wabaId: (a.config as any)?.wabaId ?? null,
+    isActive: a.isActive,
     createdAt: a.createdAt,
     updatedAt: a.updatedAt,
   }));

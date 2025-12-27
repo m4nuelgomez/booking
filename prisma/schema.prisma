@@ -88,14 +88,14 @@ model Appointment {
 }
 
 model Business {
-  id         String         @id @default(cuid())
-  name       String
-  status     BusinessStatus @default(TRIAL)
+  id          String         @id @default(cuid())
+  name        String
+  status      BusinessStatus @default(TRIAL)
   trialEndsAt DateTime?
 
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
-  deletedAt  DateTime? 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   users         User[]
   conversations Conversation[]
@@ -160,16 +160,20 @@ model Conversation {
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id])
 
+  channelAccountId String?
+  channelAccount   ChannelAccount? @relation("ConversationChannelAccount", fields: [channelAccountId], references: [id], onDelete: SetNull)
+
   business       Business        @relation(fields: [businessId], references: [id])
   messages       Message[]
   outboxMessages OutboxMessage[]
   appointments   Appointment[]
 
   @@unique([businessId, channel, contactKey])
-  @@unique([businessId, clientId, channel])
+  @@index([businessId, clientId, channel])
   @@index([businessId, channel, lastMessageAt])
   @@index([businessId, channel, unreadCount])
   @@index([clientId])
+  @@index([channelAccountId])
 }
 
 model Message {
@@ -225,21 +229,20 @@ model OutboxMessage {
 }
 
 model ChannelAccount {
-  id         String @id @default(cuid())
-  businessId String
-
-  channel String
-
+  id                String   @id @default(cuid())
+  businessId        String
+  channel           String
   providerAccountId String
-
-  displayName   String?
-  displayNumber String?
-  config        Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  displayName       String?
+  displayNumber     String?
+  config            Json?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   business Business @relation(fields: [businessId], references: [id])
+
+  conversations Conversation[] @relation("ConversationChannelAccount")
 
   @@unique([channel, providerAccountId], name: "channel_providerAccountId")
   @@index([businessId, channel])

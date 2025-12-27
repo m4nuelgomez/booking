@@ -5,6 +5,12 @@ import { requireBusinessIdFromReq } from "@/lib/auth-api";
 
 export const runtime = "nodejs";
 
+type WhatsAppConfig = {
+  accessToken?: string;
+  wabaId?: string;
+  phoneNumberId?: string;
+};
+
 function toWhatsAppRecipient(canonicPhone: string) {
   let digits = canonicPhone.replace(/\D/g, "");
 
@@ -76,6 +82,7 @@ export async function POST(req: NextRequest) {
         providerAccountId: true,
         displayNumber: true,
         config: true,
+        isActive: true,
       },
     });
 
@@ -86,20 +93,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!wa.isActive) {
+      return NextResponse.json(
+        { ok: false, error: "WhatsApp está desvinculado para este negocio" },
+        { status: 409 }
+      );
+    }
+
+    const waCfg = (wa.config ?? null) as WhatsAppConfig | null;
+
     const token =
-      typeof (wa.config as any)?.accessToken === "string" &&
-      (wa.config as any).accessToken.trim()
-        ? String((wa.config as any).accessToken).trim()
-        : process.env.WHATSAPP_ACCESS_TOKEN || "";
+      typeof waCfg?.accessToken === "string" && waCfg.accessToken.trim()
+        ? waCfg.accessToken.trim()
+        : "";
 
     const phoneNumberId = String(wa.providerAccountId || "").trim();
 
-    if (!token || !phoneNumberId) {
+    if (!token) {
       return NextResponse.json(
         {
           ok: false,
-          error: "WhatsApp mal configurado (token o phoneNumberId)",
+          error:
+            "WhatsApp está conectado, pero falta el accessToken. Ve a Configuración → WhatsApp.",
         },
+        { status: 409 }
+      );
+    }
+
+    if (!phoneNumberId) {
+      return NextResponse.json(
+        { ok: false, error: "WhatsApp mal configurado (phoneNumberId)" },
         { status: 500 }
       );
     }
@@ -234,14 +257,16 @@ export async function POST(req: NextRequest) {
             status: "FAILED",
             payload: {
               outboxId: result.outbox.id,
-              sendStatus: "FAILED",
-              sendError: errMsg,
-              failedAt: new Date().toISOString(),
-              usedTemplate,
-              templateName: usedTemplate
-                ? "jaspers_market_plain_text_v1"
-                : null,
-              waTo,
+              delivery: {
+                sendStatus: "FAILED",
+                sendError: errMsg,
+                failedAt: new Date().toISOString(),
+                usedTemplate,
+                templateName: usedTemplate
+                  ? "jaspers_market_plain_text_v1"
+                  : null,
+                waTo,
+              },
             },
           },
         });
@@ -269,11 +294,15 @@ export async function POST(req: NextRequest) {
           status: "SENT",
           payload: {
             outboxId: result.outbox.id,
-            sendStatus: "SENT",
-            sentAt: new Date().toISOString(),
-            usedTemplate,
-            templateName: usedTemplate ? "jaspers_market_plain_text_v1" : null,
-            waTo,
+            delivery: {
+              sendStatus: "SENT",
+              sentAt: new Date().toISOString(),
+              usedTemplate,
+              templateName: usedTemplate
+                ? "jaspers_market_plain_text_v1"
+                : null,
+              waTo,
+            },
           },
         },
       });

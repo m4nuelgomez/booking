@@ -7,6 +7,7 @@ type WAAccount = {
   providerAccountId: string;
   displayNumber: string | null;
   wabaId: string | null;
+  isActive: boolean;
 };
 
 export default function WhatsAppSettingsCard() {
@@ -39,7 +40,7 @@ export default function WhatsAppSettingsCard() {
     load();
   }, []);
 
-  const linked = accounts.length > 0;
+  const linked = accounts.some((a) => a.isActive);
 
   async function onLink() {
     const pid = phoneNumberId.trim();
@@ -73,6 +74,31 @@ export default function WhatsAppSettingsCard() {
       await load();
     } catch (e: any) {
       setErr(e?.message ?? "Link failed");
+    }
+  }
+
+  async function onUnlink() {
+    const ok = confirm(
+      "¿Seguro que quieres desvincular WhatsApp?\n\n" +
+        "No se borrarán conversaciones ni mensajes."
+    );
+
+    if (!ok) return;
+
+    setErr(null);
+
+    try {
+      const res = await fetch("/api/settings/whatsapp", {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("No se pudo desvincular WhatsApp");
+      }
+
+      await load();
+    } catch (e: any) {
+      setErr(e?.message ?? "Error al desvincular WhatsApp");
     }
   }
 
@@ -115,6 +141,13 @@ export default function WhatsAppSettingsCard() {
                 ) : null}
               </div>
             ))}
+
+            <button
+              onClick={onUnlink}
+              className="mt-3 w-full rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20"
+            >
+              Desvincular WhatsApp
+            </button>
 
             <div className="text-xs text-white/45">
               *Para cambiarlo, vuelve a linkear con otro phoneNumberId.

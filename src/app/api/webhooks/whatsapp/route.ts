@@ -4,6 +4,12 @@ import { normalizePhoneLoose, phoneCandidates } from "@/lib/phone";
 
 export const runtime = "nodejs";
 
+type WhatsAppConfig = {
+  accessToken?: string;
+  wabaId?: string;
+  phoneNumberId?: string;
+};
+
 const PROVIDER = "whatsapp";
 
 async function resolveBusinessAndToPhone(payload: any) {
@@ -29,10 +35,12 @@ async function resolveBusinessAndToPhone(payload: any) {
       },
     },
     select: {
+      id: true,
       businessId: true,
       displayNumber: true,
       providerAccountId: true,
       config: true,
+      isActive: true,
     },
   });
 
@@ -40,9 +48,23 @@ async function resolveBusinessAndToPhone(payload: any) {
     return {
       businessId: null as any,
       phoneNumberId,
+      channelAccountId: null as string | null,
       toPhone: "",
       ignored: true as const,
       reason: `No ChannelAccount mapping for phoneNumberId=${phoneNumberId}`,
+    };
+  }
+
+  const config = wa.config as WhatsAppConfig | null;
+
+  if (!wa.isActive || !config?.accessToken) {
+    return {
+      businessId: null as any,
+      phoneNumberId,
+      channelAccountId: wa.id as string | null,
+      toPhone: "",
+      ignored: true as const,
+      reason: "WhatsApp channel inactive",
     };
   }
 
@@ -63,6 +85,7 @@ async function resolveBusinessAndToPhone(payload: any) {
   return {
     businessId: wa.businessId,
     phoneNumberId: wa.providerAccountId,
+    channelAccountId: wa.id,
     toPhone,
     ignored: false as const,
     reason: null as string | null,
@@ -203,9 +226,11 @@ export async function POST(req: Request) {
   let businessId: string;
   let toPhone: string;
   let phoneNumberId: string;
+  let channelAccountId: string | null;
 
   const resolved = await resolveBusinessAndToPhone(payload);
 
+  channelAccountId = resolved.channelAccountId;
   phoneNumberId = resolved.phoneNumberId;
 
   if (resolved.ignored) {
@@ -220,6 +245,18 @@ export async function POST(req: Request) {
 
   businessId = resolved.businessId;
   toPhone = resolved.toPhone;
+
+  if (!channelAccountId) {
+    console.warn("[WA] Missing channelAccountId (unexpected)", {
+      phoneNumberId,
+    });
+    return NextResponse.json({
+      ok: true,
+      processed: false,
+      ignored: true,
+      reason: "Missing channelAccountId",
+    });
+  }
 
   const raw = await prisma.webhookEvent.create({
     data: {
@@ -239,6 +276,7 @@ export async function POST(req: Request) {
 
     console.log("[WA] extracted", {
       businessId,
+      channelAccountId,
       phoneNumberId,
       eventType: extracted?.eventType,
       fromPhone: extracted?.fromPhone,
@@ -282,7 +320,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Hard stop: sin providerMessageId => idempotencia débil (NULL)
     if (!extracted.providerMessageId) {
       await prisma.webhookEvent.update({
         where: { id: raw.id },
@@ -309,12 +346,14 @@ export async function POST(req: Request) {
         contactKey,
         contactDisplay: extracted.contactName?.trim() || contactKey,
         lastMessageAt: new Date(),
+        channelAccountId,
       },
       update: {
         lastMessageAt: new Date(),
         contactDisplay: extracted.contactName?.trim() || contactKey,
+        channelAccountId,
       },
-      select: { id: true, clientId: true },
+      select: { id: true, clientId: true, channelAccountId: true },
     });
 
     if (!conversation.clientId) {
@@ -331,7 +370,7 @@ export async function POST(req: Request) {
         conversation = await prisma.conversation.update({
           where: { id: conversation.id },
           data: { clientId: existingClient.id },
-          select: { id: true, clientId: true },
+          select: { id: true, clientId: true, channelAccountId: true },
         });
       }
     }

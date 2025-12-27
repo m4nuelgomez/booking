@@ -121,6 +121,36 @@ export default async function ConversationPage({
       }
     : null;
 
+  type WhatsAppConfig = {
+    accessToken?: string;
+  };
+
+  let canSend = true;
+  let disabledReason: string | null = null;
+
+  if (convo.channel !== "whatsapp") {
+    canSend = false;
+    disabledReason = "Por ahora solo puedes enviar mensajes desde WhatsApp.";
+  } else {
+    const wa = await prisma.channelAccount.findFirst({
+      where: { businessId, channel: "whatsapp" },
+      orderBy: { createdAt: "desc" },
+      select: { isActive: true, config: true },
+    });
+
+    const waCfg = (wa?.config ?? null) as WhatsAppConfig | null;
+
+    if (!wa?.isActive) {
+      canSend = false;
+      disabledReason =
+        "WhatsApp no está conectado. Ve a Configuración → WhatsApp.";
+    } else if (!waCfg?.accessToken) {
+      canSend = false;
+      disabledReason =
+        "WhatsApp está conectado, pero falta el accessToken. Ve a Configuración → WhatsApp.";
+    }
+  }
+
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
       <div className="wa-topbar sticky top-0 z-30 h-16 px-4 flex items-center gap-3 border-b border-white/10 bg-[#111b21]/80 backdrop-blur">
@@ -186,6 +216,14 @@ export default async function ConversationPage({
         </div>
 
         <div className="relative flex flex-col flex-1 min-h-0">
+          {!canSend && disabledReason ? (
+            <div className="shrink-0 px-4 pt-3">
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                {disabledReason}
+              </div>
+            </div>
+          ) : null}
+
           <MessagesList
             conversationId={convo.id}
             initialMessages={initialMessages}
@@ -195,7 +233,11 @@ export default async function ConversationPage({
       </div>
 
       <div className="wa-composer">
-        <SendBox conversationId={convo.id} />
+        <SendBox
+          conversationId={convo.id}
+          disabled={!canSend}
+          disabledReason={disabledReason ?? undefined}
+        />
       </div>
 
       <ScheduleModalShell conversationId={convo.id} />

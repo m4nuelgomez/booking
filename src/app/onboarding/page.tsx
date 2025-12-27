@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { COOKIE_ADMIN } from "@/lib/auth";
 
 function cleanStr(x: unknown) {
   return typeof x === "string" ? x.trim() : "";
@@ -21,12 +23,13 @@ function normalizeNext(nextRaw: unknown) {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; next?: string }>;
+  searchParams: { token?: string; next?: string };
 }) {
-  const sp = await searchParams;
+  const token = cleanStr(searchParams?.token);
+  const next = normalizeNext(searchParams?.next);
 
-  const token = cleanStr(sp?.token);
-  const next = normalizeNext(sp?.next);
+  const cookieStore = await cookies();
+  const isAdmin = cookieStore.get(COOKIE_ADMIN)?.value === "1";
 
   if (!token) {
     return (
@@ -38,18 +41,39 @@ export default async function OnboardingPage({
           </p>
 
           <div className="pt-2 flex gap-2">
-            <Link
-              href="/admin/businesses"
-              className="rounded-xl bg-white text-black px-4 py-2 text-sm font-medium"
-            >
-              Ir a Negocios
-            </Link>
-            <Link
-              href="/admin/businesses/new"
-              className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/5"
-            >
-              Crear negocio
-            </Link>
+            {isAdmin ? (
+              <>
+                <Link
+                  href="/admin/businesses"
+                  className="rounded-xl bg-white text-black px-4 py-2 text-sm font-medium"
+                >
+                  Ir a Negocios
+                </Link>
+                <Link
+                  href="/admin/businesses/new"
+                  className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/5"
+                >
+                  Crear negocio
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={`/login${
+                    next ? `?next=${encodeURIComponent(next)}` : ""
+                  }`}
+                  className="rounded-xl bg-white text-black px-4 py-2 text-sm font-medium"
+                >
+                  Ir a Login
+                </Link>
+
+                <form action="/api/auth/logout" method="post">
+                  <button className="rounded-xl border border-white/15 px-4 py-2 text-sm font-medium text-white/90 hover:bg-white/5">
+                    Cerrar sesión
+                  </button>
+                </form>
+              </>
+            )}
           </div>
 
           {next ? (
@@ -58,11 +82,19 @@ export default async function OnboardingPage({
               <span className="font-mono">{next}</span>
             </p>
           ) : null}
+
+          {!isAdmin ? (
+            <p className="text-xs text-white/50 pt-2">
+              Si eres un negocio, necesitas un enlace de invitación (onboarding
+              token) del administrador.
+            </p>
+          ) : null}
         </div>
       </main>
     );
   }
 
+  // lo demás igual...
   const record = await prisma.onboardingToken.findUnique({
     where: { token },
     select: {

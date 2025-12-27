@@ -49,7 +49,11 @@ export async function POST(req: NextRequest) {
     return bad("El nombre del negocio es demasiado largo (máx. 80).");
 
   const business = await prisma.business.create({
-    data: { name },
+    data: {
+      name,
+      status: "TRIAL",
+      trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    },
     select: { id: true, name: true, createdAt: true },
   });
 
@@ -65,8 +69,8 @@ export async function POST(req: NextRequest) {
 
   const next = safeNext(body?.next);
   const onboardingUrl = next
-    ? `/onboarding?token=${token}&next=${encodeURIComponent(next)}`
-    : `/onboarding?token=${token}`;
+    ? `/api/onboarding/accept?token=${token}&next=${encodeURIComponent(next)}`
+    : `/api/onboarding/accept?token=${token}`;
 
   return NextResponse.json({
     ok: true,

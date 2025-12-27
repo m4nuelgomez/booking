@@ -2,17 +2,19 @@ import LoginForm from "./LoginForm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: { next?: string };
-}) {
+type Props = {
+  searchParams: Promise<{ next?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: Props) {
+  const sp = await searchParams;
+
   const cookieStore = await cookies();
   const gate = cookieStore.get("booking_gate")?.value;
   const bid = cookieStore.get("booking_bid")?.value;
 
   if (gate === "1") {
-    const next = searchParams?.next;
+    const next = sp?.next;
 
     if (next && next.startsWith("/")) {
       redirect(next);

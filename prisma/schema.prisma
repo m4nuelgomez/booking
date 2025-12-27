@@ -39,6 +39,13 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum BusinessStatus {
+  TRIAL
+  ACTIVE
+  PAUSED
+  CANCELED
+}
+
 model Client {
   id         String   @id @default(cuid())
   businessId String
@@ -83,6 +90,8 @@ model Appointment {
 model Business {
   id        String   @id @default(cuid())
   name      String
+  status    BusinessStatus @default(TRIAL)
+  trialEndsAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

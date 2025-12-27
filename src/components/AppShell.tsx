@@ -13,7 +13,6 @@ import {
   Users,
   Settings,
   LogOut,
-  Plus,
 } from "lucide-react";
 
 type NavItem = {
@@ -29,7 +28,13 @@ const STORAGE_KEY = "booking_sidebar_collapsed";
 const ICON_SIZE = 18;
 const ICON_STROKE = 2;
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  isAdmin,
+}: {
+  children: React.ReactNode;
+  isAdmin: boolean;
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -203,27 +208,59 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               })}
             </nav>
 
-            {/* Logout */}
-            <div className="px-2 py-3 border-t border-white/10">
-              <form action="/api/auth/logout" method="post">
-                <button
-                  className={[
-                    "w-full h-10 rounded-lg hover:bg-white/10 transition flex items-center gap-3",
-                    collapsed ? "justify-center px-0" : "px-3",
-                  ].join(" ")}
-                >
-                  <span
+            {/* Footer */}
+            <div className="px-2 py-3 border-t border-white/10 space-y-1">
+              {isAdmin ? (
+                // Admin: solo salir del negocio (borra booking_bid y regresa a admin/businesses)
+                <form action="/api/auth/leave-business" method="post">
+                  <button
+                    type="submit"
                     className={[
-                      "grid place-items-center flex-none",
-                      collapsed ? "w-full" : "w-10",
+                      "w-full h-10 rounded-lg hover:bg-white/10 transition flex items-center gap-3",
+                      collapsed ? "justify-center px-0" : "px-3",
                     ].join(" ")}
+                    title="Salir del negocio"
                   >
-                    <LogOut size={18} strokeWidth={2} />
-                  </span>
+                    <span
+                      className={[
+                        "grid place-items-center flex-none",
+                        collapsed ? "w-full" : "w-10",
+                      ].join(" ")}
+                    >
+                      <LogOut size={18} strokeWidth={2} />
+                    </span>
 
-                  {!collapsed && <span className="text-sm">Cerrar sesión</span>}
-                </button>
-              </form>
+                    {!collapsed && (
+                      <span className="text-sm">Salir del negocio</span>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                // Negocio: solo cerrar sesión (borra booking_gate y manda a /login)
+                <form action="/api/auth/logout" method="post">
+                  <button
+                    type="submit"
+                    className={[
+                      "w-full h-10 rounded-lg hover:bg-white/10 transition flex items-center gap-3",
+                      collapsed ? "justify-center px-0" : "px-3",
+                    ].join(" ")}
+                    title="Cerrar sesión"
+                  >
+                    <span
+                      className={[
+                        "grid place-items-center flex-none",
+                        collapsed ? "w-full" : "w-10",
+                      ].join(" ")}
+                    >
+                      <LogOut size={18} strokeWidth={2} />
+                    </span>
+
+                    {!collapsed && (
+                      <span className="text-sm">Cerrar sesión</span>
+                    )}
+                  </button>
+                </form>
+              )}
             </div>
           </aside>
         </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { COOKIE_GATE, COOKIE_ADMIN } from "@/lib/auth";
+import { COOKIE_BID } from "@/lib/auth";
 
 function expireCookie(res: NextResponse, name: string) {
   res.cookies.set(name, "", {
@@ -13,10 +13,7 @@ function expireCookie(res: NextResponse, name: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const res = NextResponse.redirect(new URL("/login", req.url));
-
-  expireCookie(res, COOKIE_GATE);
-  expireCookie(res, COOKIE_ADMIN);
-
+  const res = NextResponse.redirect(new URL("/admin/businesses", req.url));
+  expireCookie(res, COOKIE_BID);
   return res;
 }

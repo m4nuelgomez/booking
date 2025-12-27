@@ -35,10 +35,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding?token=INVALID", url));
   }
 
-  // ✅ Invalida el token (1 uso). Para pilotos esto es lo más seguro.
   await prisma.onboardingToken.delete({ where: { token: record.token } });
 
-  const hasGate = Boolean(req.cookies.get(COOKIE_GATE)?.value);
+  const hasGate = req.cookies.get(COOKIE_GATE)?.value === "1";
 
   const target = hasGate
     ? next || "/app/dashboard"
@@ -50,6 +49,8 @@ export async function GET(req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+    secure: process.env.NODE_ENV === "production",
   });
 
   return res;

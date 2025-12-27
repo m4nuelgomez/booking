@@ -6,11 +6,6 @@ export const COOKIE_GATE = "booking_gate";
 export const COOKIE_BID = "booking_bid";
 export const COOKIE_ADMIN = "booking_admin";
 
-/* ================================
-   SERVER COMPONENTS / ACTIONS
-   (usan await cookies() + redirect)
-================================ */
-
 export async function requireGate() {
   const cookieStore = await cookies();
   const gate = cookieStore.get(COOKIE_GATE)?.value;
@@ -38,14 +33,9 @@ export async function setBusinessIdCookie(businessId: string) {
     httpOnly: true,
     path: "/",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 14,
+    maxAge: 60 * 60 * 24 * 30,
   });
 }
-
-/* ================================
-   ROUTE HANDLERS (API)
-   (usan req.cookies, NO redirect)
-================================ */
 
 type AuthOk = { ok: true; businessId: string };
 type AuthFail = { ok: false; status: number; error: string };

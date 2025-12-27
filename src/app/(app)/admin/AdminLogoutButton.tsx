@@ -14,16 +14,12 @@ export function AdminLogoutButton() {
     try {
       const res = await fetch("/api/auth/logout", { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok)
-        throw new Error(data?.error ?? `HTTP ${res.status}`);
 
-      router.push("/login");
-      router.refresh();
-    } catch {
-      router.push("/login");
-      router.refresh();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
     } finally {
-      setLoading(false);
+      router.replace("/login");
     }
   }
 

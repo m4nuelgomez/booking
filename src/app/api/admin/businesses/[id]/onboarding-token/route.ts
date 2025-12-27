@@ -30,6 +30,6 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    onboardingUrl: `/onboarding?token=${token}`,
+    onboardingUrl: `/api/onboarding/accept?token=${token}`,
   });
 }

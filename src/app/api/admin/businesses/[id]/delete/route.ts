@@ -15,7 +15,10 @@ function expireCookie(res: NextResponse, name: string) {
   });
 }
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
   const isAdmin = req.cookies.get(COOKIE_ADMIN)?.value === "1";
   if (!isAdmin) {
     return NextResponse.json(
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
     );
   }
 
-  const businessId = ctx.params.id;
+  const { id: businessId } = await ctx.params;
 
   const body = await req.json().catch(() => ({}));
   const confirm = String(body?.confirm ?? "")

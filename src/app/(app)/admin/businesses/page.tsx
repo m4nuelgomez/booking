@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import GenerateOnboardingLinkButton from "./GenerateOnboardingLinkButton";
 import ImpersonateBusinessButton from "./ImpersonateBusinessButton";
 import DeleteBusinessButton from "./DeleteBusinessButton";
+import RestoreBusinessButton from "./RestoreBusinessButton";
 
 function fmtShort(d: Date) {
   return d.toLocaleDateString();
@@ -64,11 +65,18 @@ function Badge({
   );
 }
 
-export default async function AdminBusinessesPage() {
+export default async function AdminBusinessesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ view?: string }>;
+}) {
   await requireAdmin();
+  const sp = (await searchParams) ?? {};
+  const view = sp.view ?? "active";
+  const showDeleted = view === "deleted";
 
   const items = await prisma.business.findMany({
-    where: { deletedAt: null },
+    where: showDeleted ? { deletedAt: { not: null } } : { deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: {
@@ -112,18 +120,44 @@ export default async function AdminBusinessesPage() {
 
         <div className="flex items-center gap-2">
           <Link
-            href="/admin/businesses/new"
-            className="rounded-xl bg-white text-black px-3 py-2 text-sm font-medium"
+            href="/admin/businesses"
+            className={`rounded-xl px-3 py-2 text-sm font-medium ${
+              !showDeleted
+                ? "bg-white text-black"
+                : "border border-white/15 text-white/90 hover:bg-white/5"
+            }`}
           >
-            Crear negocio
+            Activos
+          </Link>
+
+          <Link
+            href="/admin/businesses?view=deleted"
+            className={`rounded-xl px-3 py-2 text-sm font-medium ${
+              showDeleted
+                ? "bg-white text-black"
+                : "border border-white/15 text-white/90 hover:bg-white/5"
+            }`}
+          >
+            Eliminados
           </Link>
         </div>
+
+        {!showDeleted && (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/businesses/new"
+              className="rounded-xl bg-white text-black px-3 py-2 text-sm font-medium"
+            >
+              Crear negocio
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* List */}
       <div className="rounded-2xl border border-white/10 overflow-hidden bg-white/5">
         <div className="border-b border-white/10 px-4 py-2 text-xs text-white/60">
-          {items.length} negocio(s)
+          {items.length} negocio(s) {showDeleted ? "eliminados" : "activos"}
         </div>
 
         <div className="divide-y divide-white/10 bg-transparent">
@@ -178,30 +212,45 @@ export default async function AdminBusinessesPage() {
 
                     {/* Actions */}
                     <div className="flex flex-wrap gap-2 pt-1">
-                      <GenerateOnboardingLinkButton
-                        businessId={b.id}
-                        variant="copy"
-                      />
-                      <GenerateOnboardingLinkButton
-                        businessId={b.id}
-                        variant="open"
-                      />
+                      {!showDeleted ? (
+                        <>
+                          <GenerateOnboardingLinkButton
+                            businessId={b.id}
+                            variant="copy"
+                          />
+                          <GenerateOnboardingLinkButton
+                            businessId={b.id}
+                            variant="open"
+                          />
 
-                      <ImpersonateBusinessButton
-                        businessId={b.id}
-                        next="/app/dashboard"
-                        label="Abrir dashboard"
-                        className="rounded-xl bg-white text-black px-3 py-2 text-sm font-medium"
-                      />
+                          <ImpersonateBusinessButton
+                            businessId={b.id}
+                            next="/app/dashboard"
+                            label="Abrir dashboard"
+                            className="rounded-xl bg-white text-black px-3 py-2 text-sm font-medium"
+                          />
 
-                      <Link
-                        href={`/admin/businesses/${b.id}`}
-                        className="rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/5"
-                      >
-                        Ver detalle
-                      </Link>
+                          <Link
+                            href={`/admin/businesses/${b.id}`}
+                            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/5"
+                          >
+                            Ver detalle
+                          </Link>
 
-                      <DeleteBusinessButton businessId={b.id} />
+                          <DeleteBusinessButton businessId={b.id} />
+                        </>
+                      ) : (
+                        <>
+                          <Link
+                            href={`/admin/businesses/${b.id}`}
+                            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-medium text-white/90 hover:bg-white/5"
+                          >
+                            Ver detalle
+                          </Link>
+
+                          <RestoreBusinessButton businessId={b.id} />
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -218,7 +267,9 @@ export default async function AdminBusinessesPage() {
 
           {items.length === 0 && (
             <div className="px-4 py-6 text-white/60">
-              Todavía no hay negocios. Crea el primero.
+              {!showDeleted
+                ? "Todavía no hay negocios. Crea el primero."
+                : "No hay negocios eliminados."}
             </div>
           )}
         </div>

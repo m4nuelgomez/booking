@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
 import GenerateOnboardingLinkButton from "./GenerateOnboardingLinkButton";
 import ImpersonateBusinessButton from "./ImpersonateBusinessButton";
+import DeleteBusinessButton from "./DeleteBusinessButton";
 
 function fmtShort(d: Date) {
   return d.toLocaleDateString();
@@ -67,6 +68,7 @@ export default async function AdminBusinessesPage() {
   await requireAdmin();
 
   const items = await prisma.business.findMany({
+    where: { deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: {
@@ -198,6 +200,8 @@ export default async function AdminBusinessesPage() {
                       >
                         Ver detalle
                       </Link>
+
+                      <DeleteBusinessButton businessId={b.id} />
                     </div>
                   </div>
 

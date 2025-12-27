@@ -32,14 +32,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const exists = await prisma.business.findUnique({
-    where: { id: businessId },
+  const exists = await prisma.business.findFirst({
+    where: { id: businessId, deletedAt: null },
     select: { id: true },
   });
 
   if (!exists) {
     return NextResponse.json(
-      { ok: false, error: "Business not found" },
+      { ok: false, error: "Negocio no disponible." },
       { status: 404 }
     );
   }

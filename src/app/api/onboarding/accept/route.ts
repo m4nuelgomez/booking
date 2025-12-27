@@ -35,6 +35,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding?token=INVALID", url));
   }
 
+  const biz = await prisma.business.findFirst({
+    where: { id: record.businessId, deletedAt: null },
+    select: { id: true },
+  });
+
+  if (!biz) {
+    return NextResponse.redirect(
+      new URL("/onboarding?token=BUSINESS_UNAVAILABLE", url)
+    );
+  }
+
   await prisma.onboardingToken.delete({ where: { token: record.token } });
 
   const hasGate = req.cookies.get(COOKIE_GATE)?.value === "1";

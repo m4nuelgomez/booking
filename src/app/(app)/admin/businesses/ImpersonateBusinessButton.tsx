@@ -39,9 +39,9 @@ export default function ImpersonateBusinessButton({
 
       router.replace(to);
       router.refresh();
-    } catch {
+    } catch (e: any) {
       setLoading(false);
-      alert("No se pudo entrar como negocio.");
+      alert(e?.message ?? "No se pudo entrar como negocio.");
     }
   }
 

@@ -88,12 +88,14 @@ model Appointment {
 }
 
 model Business {
-  id        String   @id @default(cuid())
-  name      String
-  status    BusinessStatus @default(TRIAL)
+  id         String         @id @default(cuid())
+  name       String
+  status     BusinessStatus @default(TRIAL)
   trialEndsAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  deletedAt  DateTime? 
 
   users         User[]
   conversations Conversation[]
@@ -107,6 +109,9 @@ model Business {
   appointments Appointment[]
 
   channelAccounts ChannelAccount[]
+
+  @@index([deletedAt])
+  @@index([status, deletedAt])
 }
 
 model User {

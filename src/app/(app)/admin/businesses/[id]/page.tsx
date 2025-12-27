@@ -65,8 +65,8 @@ export default async function AdminBusinessDetailPage({
   await requireAdmin();
   const { id } = await params;
 
-  const b = await prisma.business.findUnique({
-    where: { id },
+  const b = await prisma.business.findFirst({
+    where: { id, deletedAt: null },
     select: {
       id: true,
       name: true,
@@ -83,7 +83,16 @@ export default async function AdminBusinessDetailPage({
   });
 
   if (!b) {
-    return <div className="text-white/70">Negocio no encontrado.</div>;
+    return (
+      <div className="text-white/70">
+        Negocio no encontrado (o fue eliminado).
+        <div className="mt-2">
+          <Link href="/admin/businesses" className="underline text-white/80">
+            ← Volver a negocios
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   const lastToken = b.onboardingTokens?.[0] ?? null;

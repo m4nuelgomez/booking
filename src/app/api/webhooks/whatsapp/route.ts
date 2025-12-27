@@ -1,4 +1,3 @@
-// src/app/api/webhooks/whatsapp/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizePhoneLoose, phoneCandidates } from "@/lib/phone";
@@ -38,9 +37,13 @@ async function resolveBusinessAndToPhone(payload: any) {
   });
 
   if (!wa) {
-    throw new Error(
-      `ChannelAccount not found for WhatsApp phoneNumberId=${phoneNumberId}. Create mapping first.`
-    );
+    return {
+      businessId: null as any,
+      phoneNumberId,
+      toPhone: "",
+      ignored: true as const,
+      reason: `No ChannelAccount mapping for phoneNumberId=${phoneNumberId}`,
+    };
   }
 
   const display = value?.metadata?.display_phone_number
@@ -61,6 +64,8 @@ async function resolveBusinessAndToPhone(payload: any) {
     businessId: wa.businessId,
     phoneNumberId: wa.providerAccountId,
     toPhone,
+    ignored: false as const,
+    reason: null as string | null,
   };
 }
 
@@ -199,19 +204,22 @@ export async function POST(req: Request) {
   let toPhone: string;
   let phoneNumberId: string;
 
-  try {
-    const resolved = await resolveBusinessAndToPhone(payload);
-    businessId = resolved.businessId;
-    toPhone = resolved.toPhone;
-    phoneNumberId = resolved.phoneNumberId;
-  } catch (e: any) {
-    console.error("[WA] BUSINESS_RESOLVE_FAILED", e?.message ?? e);
+  const resolved = await resolveBusinessAndToPhone(payload);
+
+  phoneNumberId = resolved.phoneNumberId;
+
+  if (resolved.ignored) {
+    console.warn("[WA] IGNORED", resolved.reason);
     return NextResponse.json({
       ok: true,
       processed: false,
-      reason: e?.message ?? "Unknown phoneNumberId",
+      ignored: true,
+      reason: resolved.reason,
     });
   }
+
+  businessId = resolved.businessId;
+  toPhone = resolved.toPhone;
 
   const raw = await prisma.webhookEvent.create({
     data: {

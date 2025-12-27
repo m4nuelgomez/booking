@@ -55,7 +55,11 @@ export function SendBox({ conversationId }: { conversationId: string }) {
         throw new Error(data?.error ?? `HTTP ${res.status}`);
 
       router.refresh();
-      window.dispatchEvent(new Event("booking:messageSent"));
+      window.dispatchEvent(
+        new CustomEvent("booking:messageSent", {
+          detail: { conversationId },
+        })
+      );
     } catch (e) {
       setText(backup);
       console.error(e);

@@ -360,7 +360,21 @@ export default function MessagesList({
   }, [conversationId]);
 
   useEffect(() => {
-    const handler = () => fetchNew();
+    function handler(e: Event) {
+      const ce = e as CustomEvent;
+
+      if (ce.detail?.conversationId !== conversationId) return;
+
+      sinceRef.current = new Date(0).toISOString();
+
+      if (inFlightRef.current) {
+        setTimeout(() => fetchNew(), 50);
+        return;
+      }
+
+      fetchNew();
+    }
+
     window.addEventListener("booking:messageSent", handler as any);
     return () =>
       window.removeEventListener("booking:messageSent", handler as any);

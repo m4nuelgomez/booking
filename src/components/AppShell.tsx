@@ -64,8 +64,6 @@ export default function AppShell({
         href: "/app/settings",
         label: "Ajustes",
         icon: <Settings size={ICON_SIZE} strokeWidth={ICON_STROKE} />,
-        disabled: true,
-        badge: "Pronto",
       },
     ],
     []

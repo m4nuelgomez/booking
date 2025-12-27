@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type WAAccount = {
   id: string;
-  phoneNumberId: string;
+  providerAccountId: string;
   displayNumber: string | null;
   wabaId: string | null;
 };
@@ -17,6 +17,7 @@ export default function WhatsAppSettingsCard() {
   const [phoneNumberId, setPhoneNumberId] = useState("");
   const [displayNumber, setDisplayNumber] = useState("");
   const [wabaId, setWabaId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
 
   async function load() {
     setLoading(true);
@@ -49,13 +50,14 @@ export default function WhatsAppSettingsCard() {
 
     setErr(null);
     try {
-      const res = await fetch("/api/whatsapp/accounts/link", {
+      const res = await fetch("/api/settings/whatsapp/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumberId: pid,
           displayNumber: displayNumber.trim() || null,
           wabaId: wabaId.trim() || null,
+          accessToken: accessToken.trim() || null,
         }),
       });
 
@@ -66,6 +68,8 @@ export default function WhatsAppSettingsCard() {
       setPhoneNumberId("");
       setDisplayNumber("");
       setWabaId("");
+      setAccessToken("");
+
       await load();
     } catch (e: any) {
       setErr(e?.message ?? "Link failed");
@@ -102,7 +106,7 @@ export default function WhatsAppSettingsCard() {
                   {a.displayNumber ?? "Número (no guardado)"}
                 </div>
                 <div className="mt-1 text-xs text-white/45">
-                  phoneNumberId: {a.phoneNumberId}
+                  phoneNumberId: {a.providerAccountId}
                 </div>
                 {a.wabaId ? (
                   <div className="mt-1 text-xs text-white/45">
@@ -133,6 +137,22 @@ export default function WhatsAppSettingsCard() {
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none placeholder:text-white/30 focus:border-white/20"
                   placeholder="856086410929751"
                 />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs text-white/60">
+                  accessToken (opcional)
+                </label>
+                <input
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none placeholder:text-white/30 focus:border-white/20"
+                  placeholder="EAA..."
+                />
+                <div className="mt-1 text-[11px] text-white/45">
+                  *Si lo pegas aquí, este negocio podrá enviar WhatsApps sin
+                  depender del .env
+                </div>
               </div>
 
               <div>

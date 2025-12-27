@@ -48,19 +48,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-  if (!token || !phoneNumberId) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID",
-      },
-      { status: 500 }
-    );
-  }
-
   try {
     // ✅ Validar conversación por tenant
     const convo = await prisma.conversation.findFirst({
@@ -82,12 +69,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const toPhone = normalizePhone(convo.contactKey);
-    const waTo = toWhatsAppRecipient(toPhone);
+    const wa = await prisma.channelAccount.findFirst({
+      where: { businessId, channel: "whatsapp" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        providerAccountId: true,
+        displayNumber: true,
+        config: true,
+      },
+    });
 
-    const fromPhone = process.env.WHATSAPP_BUSINESS_NUMBER
-      ? normalizePhone(process.env.WHATSAPP_BUSINESS_NUMBER)
+    if (!wa) {
+      return NextResponse.json(
+        { ok: false, error: "WhatsApp no conectado para este negocio" },
+        { status: 400 }
+      );
+    }
+
+    const token =
+      typeof (wa.config as any)?.accessToken === "string" &&
+      (wa.config as any).accessToken.trim()
+        ? String((wa.config as any).accessToken).trim()
+        : process.env.WHATSAPP_ACCESS_TOKEN || "";
+
+    const phoneNumberId = String(wa.providerAccountId || "").trim();
+
+    if (!token || !phoneNumberId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "WhatsApp mal configurado (token o phoneNumberId)",
+        },
+        { status: 500 }
+      );
+    }
+
+    const fromPhone = wa.displayNumber
+      ? normalizePhone(String(wa.displayNumber))
       : "";
+
+    const toPhone = normalizePhone(convo.contactKey);
+
+    if (!toPhone) {
+      return NextResponse.json(
+        { ok: false, error: "Número de destinatario inválido" },
+        { status: 400 }
+      );
+    }
+
+    const waTo = toWhatsAppRecipient(toPhone);
 
     const result = await prisma.$transaction(async (tx) => {
       const outbox = await tx.outboxMessage.create({
@@ -219,7 +249,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(
         { ok: false, error: errMsg, meta: waData },
-        { status: 200 }
+        { status: 502 }
       );
     }
 

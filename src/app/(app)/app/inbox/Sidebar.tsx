@@ -66,9 +66,21 @@ export default function Sidebar({
   useEffect(() => {
     setUnreadOverride((prev) => {
       const next = { ...prev };
+
       for (const it of items) {
-        if (next[it.id] == null) next[it.id] = it.unreadCount ?? 0;
+        const server = it.unreadCount ?? 0;
+        const local = next[it.id];
+
+        if (local == null) {
+          next[it.id] = server;
+          continue;
+        }
+
+        if (server > local) next[it.id] = server;
+
+        if (server === 0 && local !== 0) next[it.id] = 0;
       }
+
       return next;
     });
   }, [items]);
@@ -101,7 +113,16 @@ export default function Sidebar({
     return () => window.removeEventListener("booking:read", handler as any);
   }, [router]);
 
-  // scroll al activo
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+
+    window.addEventListener("booking:messageSent", handler as any);
+    return () =>
+      window.removeEventListener("booking:messageSent", handler as any);
+  }, [router]);
+
   useEffect(() => {
     if (!effectiveActiveId) return;
     const el = document.getElementById(`convo-${effectiveActiveId}`);
